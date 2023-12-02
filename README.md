@@ -1,10 +1,6 @@
 # pysco: PYthon ShortCuts & Others
 
----
-
-`pysco` is a Python module that contains some plotting routines I normally use and other useful snippets.
-
----
+`pysco` is a Python module that contains some plotting routines I usually use and other useful snippets.
 
 ## Installing:
 1. Clone the repository:
