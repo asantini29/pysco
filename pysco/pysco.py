@@ -9,6 +9,6 @@ if __name__ != "__main__":
     __license__             = "MIT"
 
 
-from .plot import default_plotting, set_ticker
+from .plot import default_plotting
 
 default_plotting()

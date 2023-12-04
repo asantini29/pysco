@@ -1,11 +1,28 @@
 from functools import wraps
+from importlib.machinery import SourceFileLoader
+import os
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 from matplotlib import ticker
 import numpy as np
-import corner
+
+#ry: 
+#print(os.getcwd())
+pysco_file = str(__file__)
+corner_file = pysco_file[:-19] + 'corner.py/src/corner/__init__.py'
+print(corner_file)
+corner = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
+print('imported custom corner.py (' + corner_file + ')')
+# except:
+#     import corner
+#     print('imported standard corner.py')
+
 
 #---- Plotting Stuff ----#
+
+def which_corner():
+    print('You are using the corner package located at' + str(corner.__file__))
 
 def default_plotting():
     default_rcParams = {
@@ -74,11 +91,19 @@ def custom_corner(function):
             }
 
         plt.rcParams.update(corner_rcParams)
-    
+
+        # truth_color = 
+        # color = 
+        # quantiles_color = '#254B5A' #'#20404D'
+
         defaults_kwargs = dict(
             bins=50, smooth=0.5,
             title_kwargs=dict(fontsize=16), color='#366c81',
-            truth_color='k', title_quantiles=[0.05, 0.5, 0.95], show_titles = True,
+            truth_color='#990000',
+            quantiles=[0.05, 0.5, 0.95], 
+            #title_quantiles=[0.05, 0.5, 0.95], 
+            quantiles_color='k', 
+            show_titles = True,
             levels=(1 - np.exp(-0.5), 1 - np.exp(-2), 1 - np.exp(-9 / 2.)),
             plot_density=False, plot_datapoints=True, fill_contours=True,
             max_n_ticks=5, use_math_text=True)
