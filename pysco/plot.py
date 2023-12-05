@@ -106,7 +106,7 @@ def custom_corner(function):
             show_titles = True, title_fmt='.2e',
             levels=(1 - np.exp(-0.5), 1 - np.exp(-2), 1 - np.exp(-9 / 2.)),
             plot_density=False, plot_datapoints=True, fill_contours=True,
-            max_n_ticks=5, use_math_text=True)
+            max_n_ticks=5, use_math_text=True, custom_whspace=0.05)
         
 
         _kwargs = kwargs.copy()
@@ -144,6 +144,7 @@ def custom_corner(function):
         kwargs = defaults_kwargs
 
         fig = function(*args, **kwargs)
+
         if save:
             fig.savefig(filename)
         
