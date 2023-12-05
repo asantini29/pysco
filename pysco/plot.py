@@ -103,7 +103,7 @@ def custom_corner(function):
             quantiles=[0.05, 0.5, 0.95], 
             #title_quantiles=[0.05, 0.5, 0.95], 
             quantiles_color='k', 
-            show_titles = True,
+            show_titles = True, title_fmt='.2E',
             levels=(1 - np.exp(-0.5), 1 - np.exp(-2), 1 - np.exp(-9 / 2.)),
             plot_density=False, plot_datapoints=True, fill_contours=True,
             max_n_ticks=5, use_math_text=True)
