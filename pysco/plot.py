@@ -1,3 +1,4 @@
+
 from functools import wraps
 from importlib.machinery import SourceFileLoader
 import os
@@ -7,16 +8,14 @@ from matplotlib.colors import to_rgba
 from matplotlib import ticker
 import numpy as np
 
-#ry: 
-#print(os.getcwd())
-pysco_file = str(__file__)
-corner_file = pysco_file[:-19] + 'corner.py/src/corner/__init__.py'
-print(corner_file)
-corner = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
-print('imported custom corner.py (' + corner_file + ')')
-# except:
-#     import corner
-#     print('imported standard corner.py')
+try: 
+    pysco_file = str(__file__)
+    corner_file = pysco_file[:-19] + 'corner.py/src/corner/__init__.py'
+    corner = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
+    #print('imported custom corner.py (' + corner_file + ')')
+except:
+    import corner
+    print('WARNING: imported standard corner.py')
 
 
 #---- Plotting Stuff ----#
@@ -35,6 +34,7 @@ def default_plotting():
         'font.size': 14,
         'figure.figsize': (5, 5),
         'figure.titlesize': 'large',
+        'axes.formatter.use_mathtext': True,
         'axes.titlesize': 'large',
         'axes.labelsize': 'large',
         'xtick.top': True,
