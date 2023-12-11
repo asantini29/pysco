@@ -150,6 +150,8 @@ def custom_corner(function):
         
         default_plotting()
 
+        return fig
+
     return wrapper
 
 @custom_corner
