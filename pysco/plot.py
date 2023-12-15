@@ -11,10 +11,10 @@ import numpy as np
 try: 
     pysco_file = str(__file__)
     corner_file = pysco_file[:-19] + 'corner.py/src/corner/__init__.py'
-    corner = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
+    c = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
     #print('imported custom corner.py (' + corner_file + ')')
 except:
-    import corner
+    import corner as c
     print('WARNING: imported standard corner.py')
 
 
@@ -155,8 +155,8 @@ def custom_corner(function):
     return wrapper
 
 @custom_corner
-def plot_corner(*args, **kwargs):
-    fig =  corner.corner(*args, **kwargs)
+def corner(*args, **kwargs):
+    fig =  c.corner(*args, **kwargs)
     return fig
 
 def color_cycle(cmap=None):
