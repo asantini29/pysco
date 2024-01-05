@@ -10,9 +10,9 @@ import numpy as np
 
 try: 
     pysco_file = str(__file__)
-    corner_file = pysco_file[:-19] + 'corner.py/src/corner/__init__.py'
+    corner_file = os.getenv('CORNER_PATH') + '/src/corner/__init__.py'
+    
     c = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
-    #print('imported custom corner.py (' + corner_file + ')')
 except:
     import corner as c
     print('WARNING: imported standard corner.py')
