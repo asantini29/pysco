@@ -3,6 +3,7 @@ from functools import wraps
 from importlib.machinery import SourceFileLoader
 import os
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 from matplotlib import ticker
@@ -68,6 +69,9 @@ def default_plotting():
 
     plt.rcParams.update(default_rcParams)
 
+def reset_rc():
+    mpl.rcParams.update(mpl.rcParamsDefault)
+
 def set_ticker():
     ticker.ScalarFormatter(useMathText=plt.rcParams['text.usetex'])
 
@@ -90,7 +94,17 @@ def custom_corner(function):
             'lines.linewidth': 1.5,
             }
 
-        plt.rcParams.update(corner_rcParams)
+        # customize matplotlib
+        if 'custom_rc' in kwargs.keys():
+            custom_rc = kwargs.pop('custom_rc')
+        else:
+            custom_rc = True
+        if custom_rc:
+            plt.rcParams.update(corner_rcParams)
+
+        if 'rcParams' in kwargs.keys():
+            rcParams = kwargs.pop('rcParams')
+            plt.rcParams.update(rcParams)
 
         # truth_color = 
         # color = 
