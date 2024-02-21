@@ -36,6 +36,7 @@ def default_plotting():
         'figure.figsize': (5, 5),
         'figure.titlesize': 'large',
         'axes.formatter.use_mathtext': True,
+        'axes.formatter.limits': [-2, 4],
         'axes.titlesize': 'large',
         'axes.labelsize': 'large',
         'xtick.top': True,
@@ -106,16 +107,11 @@ def custom_corner(function):
             rcParams = kwargs.pop('rcParams')
             plt.rcParams.update(rcParams)
 
-        # truth_color = 
-        # color = 
-        # quantiles_color = '#254B5A' #'#20404D'
-
         defaults_kwargs = dict(
             bins=50, smooth=0.5,
             title_kwargs=dict(fontsize=16), color='#366c81',
-            truth_color='#990000',
+            truth_color='#9A0202', #'#990000'
             quantiles=[0.05, 0.5, 0.95], 
-            #title_quantiles=[0.05, 0.5, 0.95], 
             quantiles_color='k', 
             show_titles = True, title_fmt='.2e',
             levels=(1 - np.exp(-0.5), 1 - np.exp(-2), 1 - np.exp(-9 / 2.)),
