@@ -135,7 +135,8 @@ def custom_corner(function):
         hist_kwargs = dict(
                     histtype='stepfilled',
                     edgecolor = 'k',
-                    lw = 1.3
+                    lw = 1.3,
+                    density=True
                 )
         
         keys = _kwargs.keys()
@@ -146,6 +147,7 @@ def custom_corner(function):
             if key in hist_kwargs.keys():
                 hist_kwargs[key] = kwargs[key]
                 kwargs.pop(key)
+            
 
         defaults_kwargs.update(kwargs)
         fc = to_rgba(defaults_kwargs['color'], alpha=0.5)
@@ -169,7 +171,7 @@ def corner(*args, **kwargs):
     fig =  c.corner(*args, **kwargs)
     return fig
 
-def color_cycle(cmap=None):
+def set_color_cycle(cmap=None):
     '''
     use custom colormap as standard colorcycle
     '''
@@ -178,3 +180,7 @@ def color_cycle(cmap=None):
     else:
          plt.rcParams["axes.prop_cycle"] =  plt.rcParamsDefault["axes.prop_cycle"]
     
+def get_colors_from_cmap(N, cmap='viridis'):
+    cmap = mpl.colormaps[cmap]
+    colors = cmap(np.linspace(0.3, 1., N))
+    return colors
