@@ -174,7 +174,7 @@ def corner(*args, **kwargs):
 
 def set_color_cycle_from_cmap(cmap=None):
     '''
-    use custom colormap as standard colorcycle
+    use custom colormap as standard colorcycle. 
     '''
     if cmap:
         plt.rcParams["axes.prop_cycle"] = plt.cycler("color", cmap.colors)
@@ -190,13 +190,15 @@ def get_colors_from_cmap(N, cmap='viridis', reverse=False):
 
 def custom_color_cycle(colors='colors10', linestyles=['-'], skip=0, lsfirst=False):
     '''
-    setup a custom matplotlib color cycler
+    setup a custom matplotlib color cycler.
+    `colors6`, `colors8`, `colors10` refer to the results of arXiv:2107.02270.
+    `fancy` contains a color palette I like (still work in progress).
     '''
     basecolors = {
         'colors6': ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"],
         'colors8': ["#1845fb", "#ff5e02", "#c91f16", "#c849a9", "#adad7d", "#86c8dd", "#578dff", "#656364"],
         'colors10': ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"],
-        'fancy': ['#1c161c', '#077586', '#8ac5ad', '#324b58', '#80c486']
+        'fancy': ['#1c161c', '#324b58', '#088395', '#8ac5ad', '#a1f5a8']
     }
     baselinestyles = ['-', '--', '-.', ':']
 
