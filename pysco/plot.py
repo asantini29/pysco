@@ -188,10 +188,30 @@ def get_colors_from_cmap(N, cmap='viridis', reverse=False):
         colors = colors[::-1]
     return colors
 
-def custom_color_cycle(colors=['#1c161c', '#077586', '#8ac5ad', '#324b58', '#80c486'], linestyles=['-', '--', '-.', ':'], skip=0, lsfirst=False):
+def custom_color_cycle(colors='colors10', linestyles=['-'], skip=0, lsfirst=False):
     '''
-    setup a custom matplotlib color cycl
+    setup a custom matplotlib color cycler
     '''
+    basecolors = {
+        'colors6': ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"],
+        'colors8': ["#1845fb", "#ff5e02", "#c91f16", "#c849a9", "#adad7d", "#86c8dd", "#578dff", "#656364"],
+        'colors10': ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"],
+        'fancy': ['#1c161c', '#077586', '#8ac5ad', '#324b58', '#80c486']
+    }
+    baselinestyles = ['-', '--', '-.', ':']
+
+    if isinstance(colors, str):
+        assert colors in basecolors.keys()
+        colors = basecolors[colors]
+
+    elif isinstance(colors, str):
+        pass
+    else:
+        raise ValueError('provide `colors` as a list of color IDs or a key of `basecolors`')
+    
+    if isinstance(linestyles, int):
+        linestyles = baselinestyles[:linestyles]
+    
     if colors is not None:
         if lsfirst:
             mycycler = cycler(color=colors[skip:]) * cycler(linestyle=linestyles)
