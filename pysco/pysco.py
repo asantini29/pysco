@@ -9,6 +9,7 @@ if __name__ != "__main__":
     __license__             = "MIT"
 
 
-from .plot import default_plotting
+from .plot import default_plotting, custom_color_cycle
 
 default_plotting()
+custom_color_cycle()

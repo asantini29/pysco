@@ -7,6 +7,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 from matplotlib import ticker
+from cycler import cycler
 import numpy as np
 
 try: 
@@ -171,7 +172,7 @@ def corner(*args, **kwargs):
     fig =  c.corner(*args, **kwargs)
     return fig
 
-def set_color_cycle(cmap=None):
+def set_color_cycle_from_cmap(cmap=None):
     '''
     use custom colormap as standard colorcycle
     '''
@@ -180,7 +181,24 @@ def set_color_cycle(cmap=None):
     else:
          plt.rcParams["axes.prop_cycle"] =  plt.rcParamsDefault["axes.prop_cycle"]
     
-def get_colors_from_cmap(N, cmap='viridis'):
+def get_colors_from_cmap(N, cmap='viridis', reverse=False):
     cmap = mpl.colormaps[cmap]
     colors = cmap(np.linspace(0.3, 1., N))
+    if reverse:
+        colors = colors[::-1]
     return colors
+
+def custom_color_cycle(colors=['#1c161c', '#077586', '#8ac5ad', '#324b58', '#80c486'], linestyles=['-', '--', '-.', ':'], skip=0, lsfirst=False):
+    '''
+    setup a custom matplotlib color cycl
+    '''
+    if colors is not None:
+        if lsfirst:
+            mycycler = cycler(color=colors[skip:]) * cycler(linestyle=linestyles)
+        else:
+            mycycler = cycler(linestyle=linestyles) * cycler(color=colors[skip:])
+
+        plt.rcParams["axes.prop_cycle"] =  mycycler
+    
+    else:
+        plt.rcParams["axes.prop_cycle"] =  plt.rcParamsDefault["axes.prop_cycle"]
