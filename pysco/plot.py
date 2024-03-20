@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 from functools import wraps
 from importlib.machinery import SourceFileLoader
@@ -70,6 +71,7 @@ def default_plotting():
         }
 
     plt.rcParams.update(default_rcParams)
+    custom_color_cycle()
 
 def reset_rc():
     mpl.rcParams.update(mpl.rcParamsDefault)
@@ -188,7 +190,7 @@ def get_colors_from_cmap(N, cmap='viridis', reverse=False):
         colors = colors[::-1]
     return colors
 
-def custom_color_cycle(colors='colors10', linestyles=['-'], skip=0, lsfirst=False):
+def custom_color_cycle(colors='colors6', linestyles=['-'], skip=0, lsfirst=False):
     '''
     setup a custom matplotlib color cycler.
     `colors6`, `colors8`, `colors10` refer to the results of arXiv:2107.02270.
@@ -221,7 +223,7 @@ def custom_color_cycle(colors='colors10', linestyles=['-'], skip=0, lsfirst=Fals
         plt.rcParams["axes.prop_cycle"] =  plt.rcParamsDefault["axes.prop_cycle"]
 
 
-def get_colorslist(colors='colors10'):
+def get_colorslist(colors='colors6'):
     basecolors = {
         'colors6': ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"],
         'colors8': ["#1845fb", "#ff5e02", "#c91f16", "#c849a9", "#adad7d", "#86c8dd", "#578dff", "#656364"],
