@@ -194,19 +194,14 @@ def custom_color_cycle(colors='colors10', linestyles=['-'], skip=0, lsfirst=Fals
     `colors6`, `colors8`, `colors10` refer to the results of arXiv:2107.02270.
     `fancy` contains a color palette I like (still work in progress).
     '''
-    basecolors = {
-        'colors6': ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"],
-        'colors8': ["#1845fb", "#ff5e02", "#c91f16", "#c849a9", "#adad7d", "#86c8dd", "#578dff", "#656364"],
-        'colors10': ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"],
-        'fancy': ['#1c161c', '#324b58', '#088395', '#8ac5ad', '#a1f5a8']
-    }
+    
+
     baselinestyles = ['-', '--', '-.', ':']
 
     if isinstance(colors, str):
-        assert colors in basecolors.keys()
-        colors = basecolors[colors]
+        colors = get_colorslist(colors)
 
-    elif isinstance(colors, str):
+    elif isinstance(colors, list):
         pass
     else:
         raise ValueError('provide `colors` as a list of color IDs or a key of `basecolors`')
@@ -224,3 +219,15 @@ def custom_color_cycle(colors='colors10', linestyles=['-'], skip=0, lsfirst=Fals
     
     else:
         plt.rcParams["axes.prop_cycle"] =  plt.rcParamsDefault["axes.prop_cycle"]
+
+
+def get_colorslist(colors='colors10'):
+    basecolors = {
+        'colors6': ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"],
+        'colors8': ["#1845fb", "#ff5e02", "#c91f16", "#c849a9", "#adad7d", "#86c8dd", "#578dff", "#656364"],
+        'colors10': ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"],
+        'fancy': ['#1c161c', '#324b58', '#088395', '#8ac5ad', '#a1f5a8']
+    }
+
+    assert colors in basecolors.keys()
+    return basecolors[colors]
