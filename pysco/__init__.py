@@ -16,4 +16,4 @@ from .pysco import __author_email__
 
 from .pysco import *
 
-import pysco.performance, pysco.plot
+import pysco.performance, pysco.plot, pysco.eryn
