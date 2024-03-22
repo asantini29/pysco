@@ -9,7 +9,10 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 from matplotlib import ticker
 from cycler import cycler
+
 import numpy as np
+import pandas as pd
+import chainconsumer
 
 try: 
     pysco_file = str(__file__)
@@ -35,7 +38,7 @@ def default_plotting():
         'mathtext.fontset': 'cm',
         'text.latex.preamble': r"\usepackage{amsmath}",
         'font.size': 14,
-        'figure.figsize': (5, 5),
+        'figure.figsize': (7, 7),
         'figure.titlesize': 'large',
         'axes.formatter.use_mathtext': True,
         'axes.formatter.limits': [-2, 4],
@@ -196,7 +199,6 @@ def custom_color_cycle(colors='colors6', linestyles=['-'], skip=0, lsfirst=False
     `colors6`, `colors8`, `colors10` refer to the results of arXiv:2107.02270.
     `fancy` contains a color palette I like (still work in progress).
     '''
-    
 
     baselinestyles = ['-', '--', '-.', ':']
 
@@ -233,3 +235,101 @@ def get_colorslist(colors='colors6'):
 
     assert colors in basecolors.keys()
     return basecolors[colors]
+
+
+def to_pandas(samples, labels):
+    """
+    Converts the samples to a pandas DataFrame.
+
+    Parameters:
+    - samples (array): The samples to convert.
+    - labels (list): The labels for the samples.
+
+    Returns:
+    - df (DataFrame): The samples as a pandas DataFrame.
+    """
+    df = pd.DataFrame(samples, columns=labels)
+    return df
+
+def chainplot(samples, labels, names, truths, return_obj=False, colors='#3f90da', **kwargs):
+    """
+    Plot the samples using the ChainConsumer package. This function is a wrapper around the ChainConsumer.plot function.
+    The goal is to allow plotting multiple chains on the same canvas to compare different results.
+
+    Arguments:
+    - samples (list or array-like): The samples to plot. Each element in the list should be a 
+                                    2D array with shape (n_samples, n_parameters). 
+                                    The arrays will be converted to pandas DataFrames by `pysco.plot.to_pandas` 
+                                    to be read by ChainConsumer.
+    - labels (list): The labels for the samples.
+    - names (list): The names of the chains.
+    - kwargs: Additional keyword arguments to pass to ChainConsumer.plot.
+    - truths (dict, list or array-like): The true values for the parameters. If None, no truths will be plotted.
+    - return_obj (bool): If True, return the ChainConsumer object. If False, plot the results.
+    - colors (str or list): The colors to use for the chains. If a string, it should be a key for `pysco.plot.get_colorslist`.
+                            If a list, it should be a list of colors to use for each chain. If None, the default matplotlib 
+                            color cycle will be used.
+    """
+    # Create a ChainConsumer object
+    c = chainconsumer.ChainConsumer()
+
+    # Check if samples is a list, if not convert it to a list with a single element
+    if not isinstance(samples, list):
+        samples = [samples]
+        names = [names]
+    # Check if colors is provided and is a list
+    if isinstance(colors, list):
+        assert len(colors) == len(samples), 'Provide a color for each chain'
+
+    # Check if colors is provided and is a string, if so get the colors from the color list
+    elif isinstance(colors, str):
+        try:
+            colors = get_colorslist(colors)
+        except:
+            colors = [colors]
+
+    # If colors is not provided, use the default matplotlib color cycle
+    else:
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+    for sample, name, color in zip(samples, names, colors):
+        # Convert the sample to a pandas DataFrame
+        df = to_pandas(sample, labels)
+
+        chain = chainconsumer.Chain(samples=df, name=name, color=color, **kwargs)
+
+        c.add_chain(chain)
+
+    if truths is not None:
+        # Check if truths is a dictionary, if not convert it to a dictionary using labels as keys
+        if not isinstance(truths, dict):
+            truths = dict(zip(labels, truths))
+
+        # Add the truth values
+        c.add_truth(chainconsumer.Truth(location=truths, color='k'))
+        c.add_marker(location=truths, name="Truth", color="k", marker_style="x", marker_size=30)
+    
+    c.set_override(chainconsumer.ChainConfig(
+        sigmas=[0, 1, 2, 3],
+        shade_gradient=0.5,
+    )
+    )
+    # Plot the results
+    c.set_plot_config(
+                chainconsumer.PlotConfig(
+                    summarise=True,
+                    tick_font_size=12,
+                    label_font_size=14,
+                    usetex=True,
+                    )   
+                    )
+    fig = c.plotter.plot(figsize=plt.rcParams['figure.figsize'])
+
+    if 'filename' in kwargs:
+        fig.savefig(kwargs['filename'])
+    
+    if return_obj:
+        return c, fig
+    else:
+        return fig
+    
