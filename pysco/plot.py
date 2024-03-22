@@ -251,7 +251,7 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(samples, labels, names, truths, return_obj=False, colors='#3f90da', **kwargs):
+def chainplot(samples, labels, names, logP, truths=None, return_obj=False, colors='#3f90da', **kwargs):
     """
     Plot the samples using the ChainConsumer package. This function is a wrapper around the ChainConsumer.plot function.
     The goal is to allow plotting multiple chains on the same canvas to compare different results.
@@ -296,7 +296,14 @@ def chainplot(samples, labels, names, truths, return_obj=False, colors='#3f90da'
         # Convert the sample to a pandas DataFrame
         df = to_pandas(sample, labels)
 
-        chain = chainconsumer.Chain(samples=df, name=name, color=color, **kwargs)
+        if logP is not None:
+            #df.insert(-1, "log_posterior", logP)
+            df['log_posterior'] = logP
+            plot_point = True
+        else:
+            plot_point = False
+
+        chain = chainconsumer.Chain(samples=df, name=name, color=color, plot_point=plot_point, marker_style="*", marker_size=50, **kwargs)
 
         c.add_chain(chain)
 
@@ -310,7 +317,7 @@ def chainplot(samples, labels, names, truths, return_obj=False, colors='#3f90da'
         c.add_marker(location=truths, name="Truth", color="k", marker_style="x", marker_size=30)
     
     c.set_override(chainconsumer.ChainConfig(
-        sigmas=[0, 1, 2, 3],
+        sigmas=[0, 1, 2],
         shade_gradient=0.5,
     )
     )
