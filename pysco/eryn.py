@@ -61,7 +61,7 @@ def adjust_covariance(samp, ndim, svd=False, idxs=1):
                 move.all_proposal[key].scale = cov
         
 
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, use_chainconsumer=False, **kwargs):
+def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, **kwargs):
     """
     Plots the diagnostics of the given sample.
 
@@ -97,26 +97,30 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
         logP = samp.get_log_posterior(discard=int(samp.iteration*0.3), thin=1)[:,0]
 
         if use_chainconsumer:
-            inds_mask = inds[key][:, 0, :, 0]
-            c, fig = pysco.plot.chainplot(chain, 
-                                       truths=truths[key], 
-                                       labels=labels[key], 
-                                       names=key,
-                                       logP=logP[inds_mask].flatten(),
-                                       filename=path + 'diagnostic/' + key + '_cornerplot',
-                                       return_obj=True,
-                                       **kwargs,
-                                       )
-            
-            # walks = c.plotter.plot_walks(#convolve=100,
-            #                              plot_weights=False,
-            #                              #columns=ndim[key],
-            #                              figsize=(20, 20),
-            #                              )
-            
-            # walks.savefig(path + 'diagnostic/' + key + '_traceplot', dpi=150)
-            # plt.tight_layout()
-            plt.close()
+            try:
+                fig = pysco.plot.chainplot(samples=chain, 
+                                        truths=truths[key], 
+                                        labels=labels[key], 
+                                        names=key,
+                                        #logP=logP[inds_mask].flatten(),
+                                        filename=path + 'diagnostic/' + key,
+                                        return_obj=False, plot_walks=False,
+                                        **kwargs,
+                                        )
+                        
+                plt.close()
+
+            except:
+                print('ChainConsumer failed to plot the chains. Falling back to `pysco.plot.corner`.')
+                fig = pysco.plot.corner(chain, 
+                                        truths=truths[key], 
+                                        labels=labels[key], 
+                                        save=True, 
+                                        custom_whspace= 0.15, 
+                                        filename=path + 'diagnostic/' + key + '_cornerplot', 
+                                        dpi=150
+                                        )
+                plt.close()
 
         else:
             fig = pysco.plot.corner(chain, 
@@ -154,6 +158,9 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
     #* Plotting acceptance fraction evolution with the number of steps
     plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names)
 
+    if rj_acceptance_all is not None:
+        plot_acceptance(steps, path, rj_acceptance_all, rj_acceptance_moves, moves_names=rj_moves_names, suffix='_rj')
+
 
 def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max):
     """
@@ -188,7 +195,7 @@ def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max):
     # Add legend entry to the plot
     plt.gca().add_artist(legend_entry)
 
-    fig.text(0.07, 0.087, f"Step: {samp.iteration}", ha='left', va='top', fontfamily='fantasy', c='red')
+    fig.text(0.07, 0.083, f"Step: {samp.iteration}", ha='left', va='top', fontfamily='fantasy', c='red')
     #plt.title(key)
     fig.savefig(path + 'diagnostic/leaves_' + key, dpi=150)
     plt.close()
@@ -215,7 +222,7 @@ def plot_logl(samp, path, nwalkers):
     plt.close()
 
 
-def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=None):
+def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=None, suffix=''):
     """
     Plot the acceptance fraction for a given number of steps.
     
@@ -245,5 +252,5 @@ def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=N
     
     plt.ylabel(r'Acceptance fraction')
     plt.legend()
-    fig.savefig(path + 'diagnostic/acceptance', dpi=150)
+    fig.savefig(path + 'diagnostic/acceptance'+suffix, dpi=150)
     plt.close()
