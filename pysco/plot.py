@@ -134,20 +134,23 @@ def custom_corner(function):
             bins=50, 
             smooth=0.5,
             title_kwargs=dict(fontsize=16), 
-            color='#1d545c',
-            truth_color='#9A0202',
-            quantiles=[0.05, 0.5, 0.95], 
-            quantiles_color='k', 
+            color='#3f90da',
+            truth_color='k',
+            quantiles=[0.05, 0.5, 0.95],
+            plot_median=False,
+            marginal_type='hist',
+            quantiles_color=None, 
             show_titles = True, 
             title_fmt='.2e',
             levels=(1 - np.exp(-0.5), 1 - np.exp(-2), 1 - np.exp(-9 / 2.)),
             plot_density=False, 
-            plot_datapoints=True, 
+            plot_datapoints=False, 
             fill_contours=True,
             max_n_ticks=5, 
             use_math_text=True, 
-            custom_whspace=0.05)
-        
+            custom_whspace=0.05,
+            #plot_datapoints=False,
+            )
 
         _kwargs = kwargs.copy()
         
@@ -163,10 +166,10 @@ def custom_corner(function):
                 filename = './cornerplot'
 
         hist_kwargs = dict(
-                    histtype='stepfilled',
-                    edgecolor = 'k',
+                    histtype='step',
+                    edgecolor = _kwargs['color'] if 'color' in _kwargs.keys() else defaults_kwargs['color'],
                     lw = 1.3,
-                    density=True
+                    density=True, 
                 )
         
         keys = _kwargs.keys()
