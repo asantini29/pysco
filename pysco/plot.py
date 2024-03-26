@@ -137,6 +137,7 @@ def custom_corner(function):
             color='#3f90da',
             truth_color='k',
             quantiles=[0.05, 0.5, 0.95],
+            linestyle='-',
             plot_median=False,
             marginal_type='hist',
             quantiles_color=None, 
