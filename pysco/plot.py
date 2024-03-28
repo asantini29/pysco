@@ -103,6 +103,20 @@ def custom_corner(function):
     
     @wraps(function)
     def wrapper(*args, **kwargs):
+        """
+        A wrapper function that customizes matplotlib settings and calls the specified function with the given arguments.
+
+        Parameters:
+        *args: positional arguments to be passed to the specified function.
+        **kwargs: keyword arguments to be passed to the specified function.
+
+        Returns:
+        fig: the figure object returned by the specified function.
+
+        Raises:
+        None.
+        """
+
         corner_rcParams = {
             'xtick.top': False,
             'xtick.major.size': 3.5,
@@ -116,7 +130,7 @@ def custom_corner(function):
             'ytick.direction': 'out',
             'ytick.labelsize': 'medium',
             'lines.linewidth': 1.5,
-            }
+        }
 
         # customize matplotlib
         if 'custom_rc' in kwargs.keys():
@@ -150,9 +164,9 @@ def custom_corner(function):
             max_n_ticks=5, 
             use_math_text=True, 
             custom_whspace=0.05,
-            #plot_datapoints=False,
-            )
+        )
 
+        
         _kwargs = kwargs.copy()
         
         save = False
@@ -167,9 +181,9 @@ def custom_corner(function):
                 filename = './cornerplot'
 
         hist_kwargs = dict(
-                    histtype='step',
+                    histtype = _kwargs['histtype'] if 'histtype' in _kwargs.keys() else 'step',
                     edgecolor = _kwargs['color'] if 'color' in _kwargs.keys() else defaults_kwargs['color'],
-                    lw = 1.3,
+                    lw = 1.5,
                     density=True, 
                 )
         
@@ -182,9 +196,9 @@ def custom_corner(function):
                 hist_kwargs[key] = kwargs[key]
                 kwargs.pop(key)
             
-
+        alpha = _kwargs['histalpha'] if 'histalpha' in _kwargs.keys() else 0.1
         defaults_kwargs.update(kwargs)
-        fc = to_rgba(defaults_kwargs['color'], alpha=0.5)
+        fc = to_rgba(defaults_kwargs['color'], alpha=alpha)
         hist_kwargs['fc'] = fc
         defaults_kwargs['hist_kwargs'] = hist_kwargs
         kwargs = defaults_kwargs

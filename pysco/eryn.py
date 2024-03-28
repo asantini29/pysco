@@ -129,7 +129,8 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
                                     save=True, 
                                     custom_whspace= 0.15, 
                                     filename=path + 'diagnostic/' + key + '_cornerplot', 
-                                    dpi=150
+                                    dpi=150,
+                                    linestyle='-',
                                     )
             plt.close()
 
