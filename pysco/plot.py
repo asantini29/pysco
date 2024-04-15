@@ -25,6 +25,22 @@ except:
     import corner as c
     warnings.warn('WARNING: imported standard corner.py')
 
+    __all__ = [
+        'which_corner',
+        'check_latex',
+        'default_plotting',
+        'reset_rc',
+        'set_ticker',
+        'custom_corner',
+        'corner',
+        'set_color_cycle_from_cmap',
+        'get_colors_from_cmap',
+        'custom_color_cycle',
+        'get_colorslist',
+        'to_pandas',
+        'chainplot'
+    ]
+
 
 #---- Plotting Stuff ----#
 
