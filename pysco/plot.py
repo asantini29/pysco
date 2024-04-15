@@ -3,6 +3,8 @@
 from functools import wraps
 from importlib.machinery import SourceFileLoader
 import os
+import warnings
+from distutils.spawn import find_executable
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -21,7 +23,7 @@ try:
     c = SourceFileLoader('corner', corner_file).load_module() #custom version of corner, allow to choose the color of the quantiles
 except:
     import corner as c
-    print('WARNING: imported standard corner.py')
+    warnings.warn('WARNING: imported standard corner.py')
 
 
 #---- Plotting Stuff ----#
@@ -29,7 +31,23 @@ except:
 def which_corner():
     print('You are using the corner package located at' + str(corner.__file__))
 
-def default_plotting():
+def check_latex():
+    if find_executable('latex'):
+        mpl.rcParams['text.usetex']=True
+        return
+    else:
+         mpl.rcParams['text.usetex']=False
+         return
+
+def default_plotting(backcolor='white', frontcolor='black'):
+    """
+    Set the default plotting parameters for matplotlib.
+
+    Parameters:
+    - backcolor (str): The background color of the plot. Default is 'white'.
+    - frontcolor (str): The foreground color of the plot. Default is 'black'.
+    """
+
     default_rcParams = {
         'text.usetex': True,
         'font.family': 'serif',
@@ -71,10 +89,26 @@ def default_plotting():
         'savefig.format' : 'pdf',
         'savefig.bbox' : 'tight',
         'savefig.transparent' : True,
-        }
+    }
+    
+    # adjust colors
+    default_rcParams['text.color'] = frontcolor
+    default_rcParams['axes.labelcolor'] = frontcolor
+    default_rcParams['axes.edgecolor'] = frontcolor
+    default_rcParams['xtick.color'] = frontcolor
+    default_rcParams['ytick.color'] = frontcolor
+    default_rcParams['axes.frontcolor'] = backcolor
+    default_rcParams['figure.frontcolor'] = backcolor
+    default_rcParams['legend.frontcolor'] = backcolor
+    default_rcParams['legend.edgecolor'] = frontcolor
+    default_rcParams['legend.labelcolor'] = frontcolor
+    default_rcParams['grid.color'] = frontcolor
+    default_rcParams['lines.color'] = frontcolor
 
     plt.rcParams.update(default_rcParams)
+
     custom_color_cycle()
+    check_latex()
 
 def reset_rc():
     mpl.rcParams.update(mpl.rcParamsDefault)
@@ -130,7 +164,10 @@ def custom_corner(function):
             'ytick.direction': 'out',
             'ytick.labelsize': 'medium',
             'lines.linewidth': 1.5,
-        }
+            }
+        
+        backcolor = plt.rcParams['figure.facecolor']
+        frontcolor = plt.rcParams['text.color']
 
         # customize matplotlib
         if 'custom_rc' in kwargs.keys():
@@ -208,7 +245,7 @@ def custom_corner(function):
         if save:
             fig.savefig(filename)
         
-        default_plotting()
+        default_plotting(backcolor=backcolor, frontcolor=frontcolor)
 
         return fig
 

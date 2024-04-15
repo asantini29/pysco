@@ -1,19 +1,12 @@
 import sys, os
 import numpy as np
-from distutils.spawn import find_executable
 import pysco
 import matplotlib as mpl
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 
 
-def check_latex():
-    if find_executable('latex'):
-        mpl.rcParams['text.usetex']=True
-        return
-    else:
-         mpl.rcParams['text.usetex']=False
-         return
+
 
 def get_clean_chain(coords, ndim, temp=0):
     """Simple utility function to extract the squeezed chains for all the parameters
@@ -89,7 +82,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
     tempcolors = pysco.plot.get_colors_from_cmap(ntemps, cmap='inferno', reverse=False)    
                         
     for key in samp.branch_names:
-        check_latex()
+        #check_latex()
         chain = get_clean_chain(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key], ndim=ndim[key])
         chain = transform_all_back[key].transform_base_parameters(chain)
 
@@ -134,7 +127,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
                                     )
             plt.close()
 
-        check_latex()
+        #check_latex()
         fig, axs = plt.subplots(ndim[key], 1)
         fig.set_size_inches(20, 20)
         for i in range(ndim[key]):
