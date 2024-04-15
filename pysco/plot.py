@@ -5,6 +5,8 @@ from importlib.machinery import SourceFileLoader
 import os
 import warnings
 from distutils.spawn import find_executable
+import warnings
+from distutils.spawn import find_executable
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
