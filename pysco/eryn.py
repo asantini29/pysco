@@ -54,7 +54,7 @@ def adjust_covariance(samp, ndim, svd=False, idxs=1):
                 move.all_proposal[key].scale = cov
         
 
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, **kwargs):
+def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
     """
     Plots the diagnostics of the given sample.
 
@@ -96,7 +96,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
                                         labels=labels[key], 
                                         names=key,
                                         #logP=logP[inds_mask].flatten(),
-                                        filename=path + 'diagnostic/' + key,
+                                        filename=path + 'diagnostic/' + key + suffix,
                                         return_obj=False, plot_walks=False,
                                         **kwargs,
                                         )
@@ -110,7 +110,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
                                         labels=labels[key], 
                                         save=True, 
                                         custom_whspace= 0.15, 
-                                        filename=path + 'diagnostic/' + key + '_cornerplot', 
+                                        filename=path + 'diagnostic/' + key + '_cornerplot' + suffix, 
                                         dpi=150
                                         )
                 plt.close()
@@ -121,7 +121,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
                                     labels=labels[key], 
                                     save=True, 
                                     custom_whspace= 0.15, 
-                                    filename=path + 'diagnostic/' + key + '_cornerplot', 
+                                    filename=path + 'diagnostic/' + key + '_cornerplot' + suffix, 
                                     dpi=150,
                                     linestyle='-',
                                     )
@@ -139,24 +139,24 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
                 if truths[key][i] is not None:
                     axs[i].axhline(truths[key][i], color=myred)
 
-        fig.savefig(path + 'diagnostic/' + key + '_traceplot', dpi=150)
+        fig.savefig(path + 'diagnostic/' + key + '_traceplot' + suffix, dpi=150)
         plt.close()
 
         #* Plotting RJ diagnostics
         if key in rj_branches:
-            plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max)
+            plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix)
 
     #* Plotting logL evolution with the number of steps
-    plot_logl(samp, path, nwalkers)
+    plot_logl(samp, path, nwalkers, suffix)
 
     #* Plotting acceptance fraction evolution with the number of steps
-    plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names)
+    plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names, suffix=suffix)
 
     if rj_acceptance_all is not None:
-        plot_acceptance(steps, path, rj_acceptance_all, rj_acceptance_moves, moves_names=rj_moves_names, suffix='_rj')
+        plot_acceptance(steps, path, rj_acceptance_all, rj_acceptance_moves, moves_names=rj_moves_names, suffix='_rj'+suffix)
 
 
-def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max):
+def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix=''):
     """
     Plots a histogram of the number of leaves for each temperature in the given sample.
 
@@ -189,12 +189,12 @@ def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max):
     # Add legend entry to the plot
     plt.gca().add_artist(legend_entry)
 
-    fig.text(0.07, 0.083, f"Step: {samp.iteration}", ha='left', va='top', fontfamily='fantasy', c='red')
+    fig.text(0.07, 0.083, f"Step: {samp.iteration}", ha='left', va='top', fontfamily='serif', c='red')
     #plt.title(key)
-    fig.savefig(path + 'diagnostic/leaves_' + key, dpi=150)
+    fig.savefig(path + 'diagnostic/leaves_' + key + suffix, dpi=150)
     plt.close()
 
-def plot_logl(samp, path, nwalkers):
+def plot_logl(samp, path, nwalkers, suffix=''):
     """
     Plot the log likelihood of the samples.
 
@@ -212,7 +212,7 @@ def plot_logl(samp, path, nwalkers):
     for walk in range(nwalkers):
         plt.plot(logl[:, 0, walk] - maxlogl[walk], color='k', ls='-', alpha=0.2, lw=1)
     plt.ylabel(r'$\log{\mathcal{L}}$')
-    fig.savefig(path + 'diagnostic/loglike', dpi=150)
+    fig.savefig(path + 'diagnostic/loglike'+suffix, dpi=150)
     plt.close()
 
 
