@@ -11,8 +11,7 @@ def timeit(function):
         toc = time.time()
 
         td = timedelta(seconds=toc-tic)
-        print(str(function.__name__) + ' Function call took %.2e s' % (toc-tic))
-        print('Time in hh:mm:ss.ms: {}'.format(td))
+        print(str(function.__name__) + ' Function call took %.2e s' % (toc-tic) + ' (i.e. {})'.format(td))
         return out
 
     return wrapper
