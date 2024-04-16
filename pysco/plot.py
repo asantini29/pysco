@@ -98,7 +98,7 @@ def default_plotting(backcolor='white', frontcolor='black'):
         'legend.framealpha': 1,
         'legend.fontsize': 'medium',
         'legend.scatterpoints' : 3,
-        'lines.color': 'k',
+        #'lines.color': 'k',
         'lines.linewidth': 2,
         'patch.linewidth': 1,
         'hatch.linewidth': 1,
@@ -118,7 +118,7 @@ def default_plotting(backcolor='white', frontcolor='black'):
     default_rcParams['axes.facecolor'] = backcolor
     default_rcParams['figure.facecolor'] = backcolor
     default_rcParams['legend.facecolor'] = backcolor
-    default_rcParams['legend.edgecolor'] = frontcolor
+    #default_rcParams['legend.edgecolor'] = frontcolor
     default_rcParams['legend.labelcolor'] = frontcolor
     default_rcParams['grid.color'] = frontcolor
     default_rcParams['lines.color'] = frontcolor
