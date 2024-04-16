@@ -204,7 +204,7 @@ def custom_corner(function):
             smooth=0.5,
             title_kwargs=dict(fontsize=16), 
             color='#3f90da',
-            truth_color='k',
+            truth_color=frontcolor,
             quantiles=[0.05, 0.5, 0.95],
             linestyle='-',
             plot_median=False,
@@ -226,8 +226,8 @@ def custom_corner(function):
         
         save = False
         if 'save' in kwargs.keys():
-            save = True
-            kwargs.pop('save')
+            #save = True
+            save = kwargs.pop('save')
             try:
                 filename = kwargs['filename']
                 kwargs.pop('filename')
@@ -248,8 +248,7 @@ def custom_corner(function):
                 defaults_kwargs.pop(key)
 
             if key in hist_kwargs.keys():
-                hist_kwargs[key] = kwargs[key]
-                kwargs.pop(key)
+                hist_kwargs[key] = kwargs.pop(key)
             
         alpha = _kwargs['histalpha'] if 'histalpha' in _kwargs.keys() else 0.1
         defaults_kwargs.update(kwargs)
