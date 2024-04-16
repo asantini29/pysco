@@ -115,9 +115,9 @@ def default_plotting(backcolor='white', frontcolor='black'):
     default_rcParams['axes.edgecolor'] = frontcolor
     default_rcParams['xtick.color'] = frontcolor
     default_rcParams['ytick.color'] = frontcolor
-    default_rcParams['axes.frontcolor'] = backcolor
-    default_rcParams['figure.frontcolor'] = backcolor
-    default_rcParams['legend.frontcolor'] = backcolor
+    default_rcParams['axes.facecolor'] = backcolor
+    default_rcParams['figure.facecolor'] = backcolor
+    default_rcParams['legend.facecolor'] = backcolor
     default_rcParams['legend.edgecolor'] = frontcolor
     default_rcParams['legend.labelcolor'] = frontcolor
     default_rcParams['grid.color'] = frontcolor
@@ -347,7 +347,7 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(samples, labels, names, weights=None, logP=None, truths=None, return_obj=False, colors='#1d545c', plot_walks=False, **kwargs):
+def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=None, return_obj=False, colors='#3f90da', plot_walks=False, **kwargs):
     """
     Plot the samples using the ChainConsumer package. This function is a wrapper around the ChainConsumer.plot function.
     The goal is to allow plotting multiple chains on the same canvas to compare different results.
