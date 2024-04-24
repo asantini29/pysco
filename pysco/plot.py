@@ -5,8 +5,6 @@ from importlib.machinery import SourceFileLoader
 import os
 import warnings
 from distutils.spawn import find_executable
-import warnings
-from distutils.spawn import find_executable
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -16,7 +14,14 @@ from cycler import cycler
 
 import numpy as np
 import pandas as pd
-import chainconsumer
+
+try:
+    import chainconsumer
+    chain_here = True
+except:
+    warnings.warn('WARNING: ChainConsumer not found. chainplot will not work.')
+    chain_here = False
+
 
 try: 
     pysco_file = str(__file__)
@@ -397,6 +402,7 @@ def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=
     plt.show()
     ```
     """
+    assert chain_here, 'ChainConsumer not found. chainplot will not work.'
     # Create a ChainConsumer object
     c = chainconsumer.ChainConsumer()
 
