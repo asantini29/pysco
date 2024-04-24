@@ -229,8 +229,7 @@ def custom_corner(function):
             #save = True
             save = kwargs.pop('save')
             try:
-                filename = kwargs['filename']
-                kwargs.pop('filename')
+                filename = kwargs.pop('filename')
             except:
                 print('"filename" not provided, defaulted to cornerplot.pdf')
                 filename = './cornerplot'
@@ -347,7 +346,7 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=None, return_obj=False, colors='#3f90da', plot_walks=False, **kwargs):
+def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=None, return_obj=False, colors=None, plot_walks=False, **kwargs):
     """
     Plot the samples using the ChainConsumer package. This function is a wrapper around the ChainConsumer.plot function.
     The goal is to allow plotting multiple chains on the same canvas to compare different results.
@@ -455,7 +454,6 @@ def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=
         shade_alpha=0.5,
         statistics='cumulative',
         summary_area=0.90,
-
     )
     )
     # Plot the results
