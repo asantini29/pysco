@@ -210,7 +210,8 @@ def plot_logl(samp, path, nwalkers, suffix=''):
     logl = samp.get_log_like(discard=int(samp.iteration*0.3), thin=1)
     maxlogl = np.max(logl[:,0,:], axis=0)
     for walk in range(nwalkers):
-        plt.plot(logl[:, 0, walk] - maxlogl[walk], color='k', ls='-', alpha=0.2, lw=1)
+        #plt.plot(logl[:, 0, walk] - maxlogl[walk], color='k', ls='-', alpha=0.2, lw=1)
+        plt.plot(logl[:, 0, walk], color='k', ls='-', alpha=0.2, lw=1)
     plt.ylabel(r'$\log{\mathcal{L}}$')
     fig.savefig(path + 'diagnostic/loglike'+suffix, dpi=150)
     plt.close()
