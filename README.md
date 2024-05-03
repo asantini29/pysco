@@ -15,7 +15,7 @@
 
 ## Tools:
 Some of the main routines currently implemented in `pysco` :
-1. **plot**: `pysco.plot` contains custom settings for `matplotlib`([here](https://matplotlib.org/stable/)) and `corner`([here](https://corner.readthedocs.io/)). Currently, some features of `pysco.plot.corner` are available only when using my edited fork of `corner`(available [here](https://github.com/asantini29/corner.py)). In order to use another custom fork of `corner` you have to set its path as an environment variable:
+1. **plot**: `pysco.plot` contains custom settings for `matplotlib`([here](https://matplotlib.org/stable/)) and `corner`([here](https://corner.readthedocs.io/)). Currently, some features of `pysco.plot.corner` are available only when using the `dev` branch of my edited fork of `corner`(available [here](https://github.com/asantini29/corner.py)). In order to use another custom fork of `corner` you have to set its path as an environment variable:
    
    ```
    export CORNER_PATH=your-path-to-corner.py
