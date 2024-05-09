@@ -54,27 +54,40 @@ def adjust_covariance(samp, ndim, svd=False, idxs=1):
                 move.all_proposal[key].scale = cov
         
 
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
+def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
     """
-    Plots the diagnostics of the given sample.
+    Plot various diagnostics for the given samples.
 
     Parameters:
-    - samp: The sample object containing the chains.
-    - path: The path to save the plots.
-    - plot_names: A list of the names of the plots to generate.
-    - ndim: A dictionary containing the number of dimensions for each branch.
-    - truths: A dictionary containing the true values for each parameter.
-    - labels: A dictionary containing the labels for each parameter.
-    - transform_all_back: A dictionary containing the transformation functions for each branch.
-    - rj: A boolean indicating whether to plot reversible jump (RJ) diagnostics. Default is False.
-    - rj_branches: A dictionary containing the names of the RJ branches. Default is None.
-    - nleaves_min: A dictionary containing the minimum number of leaves for each RJ branch. Default is None.
-    - nleaves_max: A dictionary containing the maximum number of leaves for each RJ branch. Default is None.
-    - moves_names: A list of the names of the moves. Default is None.
+    - samp: The samples object containing the chains.
+    - path: The path to save the diagnostic plots.
+    - ndim: A dictionary mapping the keys to the number of dimensions for each chain.
+    - truths: A dictionary mapping the keys to the true values for each parameter.
+    - labels: A dictionary mapping the keys to the labels for each parameter.
+    - transform_all_back: A dictionary mapping the keys to the transformation functions to apply to the chains.
+    - acceptance_all: The acceptance fraction for all moves.
+    - trace_color: The color to use for the trace plots.
+    - acceptance_moves: The acceptance fraction for each move.
+    - rj_acceptance_all: The acceptance fraction for all RJ moves.
+    - rj_acceptance_moves: The acceptance fraction for each RJ move.
+    - rj_branches: The keys of the branches to plot RJ diagnostics for.
+    - nleaves_min: The minimum number of leaves for the RJ diagnostics.
+    - nleaves_max: The maximum number of leaves for the RJ diagnostics.
+    - moves_names: The names of the moves for the acceptance fraction plot.
+    - rj_moves_names: The names of the RJ moves for the acceptance fraction plot.
+    - use_chainconsumer: Whether to use ChainConsumer for plotting.
+    - suffix: The suffix to add to the plot filenames.
+    - kwargs: Additional keyword arguments to pass to the plotting functions.
 
     Returns:
     None
     """
+    # Function implementation goes here
+    # ...
+def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
+    
+
+
     nwalkers = samp.nwalkers
     ntemps = samp.ntemps
     steps = np.arange(samp.iteration)
@@ -133,7 +146,10 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
         for i in range(ndim[key]):
             for walk in range(nwalkers):
                 chain = transform_all_back[key].transform_base_parameters(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key])
-                axs[i].plot(chain[:, 0, walk, :, i], color = 'k', ls='-', alpha = 0.2)
+                if trace_color is not None:
+                    axs[i].plot(chain[:, 0, walk, :, i], color = trace_color, ls='-', alpha = 0.2)
+                else:
+                    axs[i].plot(chain[:, 0, walk, :, i], ls='-', alpha = 1)
                 axs[i].set_ylabel(labels[key][i])
 
                 if truths[key][i] is not None:
