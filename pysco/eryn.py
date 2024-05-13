@@ -5,7 +5,7 @@ import matplotlib as mpl
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 
-
+from eryn.utils import get_integrated_act
 
 
 def get_clean_chain(coords, ndim, temp=0):
@@ -265,3 +265,26 @@ def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=N
     plt.legend()
     fig.savefig(path + 'diagnostic/acceptance'+suffix, dpi=150)
     plt.close()
+
+
+def general_act(sampler, discard=None, all_T=False):
+
+    if discard is None:
+        discard = 0.3 * sampler.iteration
+
+    samples = sampler.get_chain(discard=int(discard), thin=1)
+
+    tau_all_dict = get_integrated_act(samples)
+    tau_all = []
+
+    for names, values in tau_all_dict.items():
+        if all_T:
+            act = values.flatten()
+        else:
+            act = values[0]
+        
+        tau_all.append(act)
+    
+    tau_all = np.array(tau_all)
+
+    return np.max(tau_all)
