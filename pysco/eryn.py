@@ -53,8 +53,8 @@ def adjust_covariance(samp, ndim, svd=False, idxs=1):
             else:
                 move.all_proposal[key].scale = cov
         
-
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
+def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance_all, true_logl=None, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
+    
     """
     Plot various diagnostics for the given samples.
 
@@ -64,7 +64,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
     - ndim: A dictionary mapping the keys to the number of dimensions for each chain.
     - truths: A dictionary mapping the keys to the true values for each parameter.
     - labels: A dictionary mapping the keys to the labels for each parameter.
-    - transform_all_back: A dictionary mapping the keys to the transformation functions to apply to the chains.
+    - transform_all: A dictionary mapping the keys to the transformation functions to apply to the chains.
     - acceptance_all: The acceptance fraction for all moves.
     - trace_color: The color to use for the trace plots.
     - acceptance_moves: The acceptance fraction for each move.
@@ -82,11 +82,6 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
     Returns:
     None
     """
-    # Function implementation goes here
-    # ...
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, acceptance_all, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
-    
-
 
     nwalkers = samp.nwalkers
     ntemps = samp.ntemps
@@ -97,7 +92,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
     for key in samp.branch_names:
         #check_latex()
         chain = get_clean_chain(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key], ndim=ndim[key])
-        chain = transform_all_back[key].transform_base_parameters(chain)
+        chain = transform_all[key].transform_base_parameters(chain)
 
         inds = samp.get_inds(discard=int(samp.iteration*0.3))
         logP = samp.get_log_posterior(discard=int(samp.iteration*0.3), thin=1)[:,0]
@@ -145,7 +140,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
         fig.set_size_inches(20, 20)
         for i in range(ndim[key]):
             for walk in range(nwalkers):
-                chain = transform_all_back[key].transform_base_parameters(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key])
+                chain = transform_all[key].transform_base_parameters(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key])
                 if trace_color is not None:
                     axs[i].plot(chain[:, 0, walk, :, i], color = trace_color, ls='-', alpha = 0.2)
                 else:
@@ -163,7 +158,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all_back, accep
             plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix)
 
     #* Plotting logL evolution with the number of steps
-    plot_logl(samp, path, nwalkers, suffix)
+    plot_logl(samp, path, nwalkers, suffix, true_logl=true_logl)
 
     #* Plotting acceptance fraction evolution with the number of steps
     plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names, suffix=suffix)
@@ -210,7 +205,7 @@ def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suff
     fig.savefig(path + 'diagnostic/leaves_' + key + suffix, dpi=150)
     plt.close()
 
-def plot_logl(samp, path, nwalkers, suffix=''):
+def plot_logl(samp, path, nwalkers, suffix='', true_logl=None):
     """
     Plot the log likelihood of the samples.
 
@@ -224,13 +219,27 @@ def plot_logl(samp, path, nwalkers, suffix=''):
     """
     fig = plt.figure()
     logl = samp.get_log_like(discard=int(samp.iteration*0.3), thin=1)
-    maxlogl = np.max(logl[:,0,:], axis=0)
     for walk in range(nwalkers):
         #plt.plot(logl[:, 0, walk] - maxlogl[walk], color='k', ls='-', alpha=0.2, lw=1)
         plt.plot(logl[:, 0, walk], color='k', ls='-', alpha=0.2, lw=1)
+
+    if true_logl is not None:
+        plt.axhline(true_logl, color='r', ls='--', lw=1)
     plt.ylabel(r'$\log{\mathcal{L}}$')
-    fig.savefig(path + 'diagnostic/loglike'+suffix, dpi=150)
+    fig.savefig(path + 'diagnostic/loglike_evolution'+suffix, dpi=150)
     plt.close()
+
+    # plot an histogram of the log likelihood at the current step for the T=1 chain
+    logl_here = logl[-1, 0, :].flatten()
+    fig = plt.figure()
+    plt.hist(logl_here, bins=100, histtype='step', color='k', alpha=1, lw=2, density=True, label=f"Step: {samp.iteration}")
+    if true_logl is not None:
+        plt.axvline(true_logl, color='k', ls='--', lw=1)
+    plt.xlabel(r'$\log{\mathcal{L}}$')
+
+    plt.legend()
+
+    fig.savefig(path + 'diagnostic/loglike_hist'+suffix, dpi=150)
 
 
 def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=None, suffix=''):
