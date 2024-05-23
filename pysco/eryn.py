@@ -5,7 +5,7 @@ import matplotlib as mpl
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 
-from eryn.utils import get_integrated_act
+from eryn.utils import get_integrated_act, psrf, Stopping
 
 
 def get_clean_chain(coords, ndim, temp=0):
@@ -297,3 +297,69 @@ def general_act(sampler, discard=None, all_T=False):
     tau_all = np.array(tau_all)
 
     return np.max(tau_all)
+
+
+class GelmanRubinStopping(Stopping):
+    def __init__(self, threshold=1.1, per_walker=False, transform_fn=None, sort_fn=None, discard=0.3, thin=True, start_iteration=0, verbose=False):
+        self.threshold = threshold
+        self.per_walker = per_walker
+        self.transform_fn = transform_fn
+        self.sort_fn = sort_fn
+        self.discard = discard
+        self.thin = thin
+        self.start_iteration = start_iteration
+        self.verbose = verbose
+
+    def __call__(self, iter, sample, sampler):
+        """Call update function.
+
+        Args:
+            iter (int): Iteration of the sampler.
+            last_sample (obj): Last state of sampler (:class:`eryn.state.State`).
+            sampler (obj): Full sampler oject (:class:`eryn.ensemble.EnsembleSampler`).
+
+        Returns:
+            bool: Value of ``stop``. If ``True``, stop sampling.
+            
+        """
+        if iter < self.start_iteration:
+            return False
+        
+        tau = general_act(sampler, discard=self.discard) if self.thin else 1
+        
+        chains = sampler.get_chain(discard=int(self.discard), thin=tau)
+
+        if self.transform_fn is not None:
+            chains = self.transform_fn(chains)
+
+            ndims = chains.shape[-1]
+            Rhat = psrf(chains, ndims, self.per_walker)
+
+            if self.verbose:
+                print(f'Gelman-Rubin Rhat: {Rhat}')
+
+        else:
+            Rhat = []
+
+            for name, chain in chains.items:
+                chain = chain[:, 0, :, :, :]
+                nsteps, nwalkers, nleaves, ndims = chain.shape
+
+                #TODO: how to handle the case when I have multiple leaves?
+                if nleaves > 1:
+                    chain = self.sort_fn(chain)
+                chain = chain.reshape(nsteps, nwalkers, -1)
+
+                Rhat_tmp = psrf(chains, ndims, self.per_walker)
+                Rhat += [Rhat_tmp]
+
+                if self.verbose:
+                    print(f'Gelman-Rubin Rhat in the branch {name}: {Rhat_tmp}')
+
+        Rhat = np.array(Rhat)
+        
+        return np.all(Rhat < self.threshold)
+
+        
+
+    
