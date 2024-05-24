@@ -231,10 +231,11 @@ def plot_logl(samp, path, nwalkers, suffix='', true_logl=None):
 
     # plot an histogram of the log likelihood at the current step for the T=1 chain
     logl_here = logl[-1, 0, :].flatten()
+    
     fig = plt.figure()
-    plt.hist(logl_here, bins=100, histtype='step', color='k', alpha=1, lw=2, density=True, label=f"Step: {samp.iteration}")
+    plt.hist(logl_here, bins=int(nwalkers/3), histtype='step', color='k', alpha=1, lw=2, density=True, label=f"Step: {samp.iteration}")
     if true_logl is not None:
-        plt.axvline(true_logl, color='k', ls='--', lw=1)
+        plt.axvline(true_logl, color='k', ls='--', lw=2)
     plt.xlabel(r'$\log{\mathcal{L}}$')
 
     plt.legend()
