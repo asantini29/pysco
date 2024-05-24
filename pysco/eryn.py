@@ -276,31 +276,64 @@ def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=N
     plt.close()
 
 
-def general_act(sampler, discard=None, all_T=False):
+def general_act(sampler, discard=None, all_T=False, return_max=True, act_kwargs={}):
+    """
+    Compute the generalised auto-correlation time for the given sampler.
 
+    Parameters:
+    - sampler (object): The sampler object.
+    - discard (int): The number of samples to discard. Default is None.
+    - all_T (bool): Whether to compute the auto-correlation time for all temperatures. Default is False.
+    - return_max (bool): Whether to return the maximum auto-correlation time. Default is True.
+    - act_kwargs (dict): Additional keyword arguments to pass to the auto-correlation time function.
+
+    Returns:
+    if return_max:
+    - tau_all (float): The maximum auto-correlation time across all the parameters.
+
+    else:
+    - tau_all (array-like): The auto-correlation time for all the parameters.
+    """
     if discard is None:
         discard = 0.3 * sampler.iteration
 
     samples = sampler.get_chain(discard=int(discard), thin=1)
 
-    tau_all_dict = get_integrated_act(samples)
+    tau_all_dict = get_integrated_act(samples, **act_kwargs)
     tau_all = []
 
-    for names, values in tau_all_dict.items():
-        if all_T:
-            act = values.flatten()
-        else:
-            act = values[0]
+    for values in tau_all_dict.values:
+        values = np.atleast_2d(values)
+        nw, nt = values.shape
+        if not all_T:
+            act = values[:, 0]
         
         tau_all.append(act)
     
     tau_all = np.array(tau_all)
 
-    return np.max(tau_all)
+    if return_max:
+        tau_all.flatten()
+        return np.max(tau_all)
+    
+    return tau_all
 
 
 class GelmanRubinStopping(Stopping):
     def __init__(self, threshold=1.1, per_walker=False, transform_fn=None, sort_fn=None, discard=0.3, thin=True, start_iteration=0, verbose=False):
+        """Stopping criterion based on the Gelman-Rubin convergence diagnostic.
+
+        Args:
+            threshold (float): Threshold value for the Gelman-Rubin diagnostic. Default is 1.1.
+            per_walker (bool): Whether to compute the Gelman-Rubin diagnostic per walker. Default is False.
+            transform_fn (callable): Function to transform the chains before computing the diagnostic. Default is None.
+            sort_fn (callable): Function to sort the chains before computing the diagnostic. Default is None.
+            discard (float): Fraction of the samples to discard before computing the diagnostic. Default is 0.3.
+            thin (bool): Whether to thin the chains before computing the diagnostic. Default is True.
+            start_iteration (int): Iteration to start applying the stopping criterion. Default is 0.
+            verbose (bool): Whether to print the diagnostic values. Default is False.
+        """
+
         self.threshold = threshold
         self.per_walker = per_walker
         self.transform_fn = transform_fn
@@ -346,6 +379,7 @@ class GelmanRubinStopping(Stopping):
                 nsteps, nwalkers, nleaves, ndims = chain.shape
 
                 #TODO: how to handle the case when I have multiple leaves?
+                #TODO: test also on the logl and number of leaves
                 if nleaves > 1:
                     chain = self.sort_fn(chain)
                 chain = chain.reshape(nsteps, nwalkers, -1)
@@ -359,7 +393,117 @@ class GelmanRubinStopping(Stopping):
         Rhat = np.array(Rhat)
         
         return np.all(Rhat < self.threshold)
+    
 
-        
+class AutoCorrelationStopping(Stopping):
+    
+    def __init__(self, autocorr_multiplier=50, verbose=False, n_iter=1000):
+        self.autocorr_multiplier = autocorr_multiplier
+        self.verbose = verbose
+        self.time = 0
+        self.n_iter = n_iter
+        self.when_to_stop = np.inf
 
+    def __call__(self, iter, last_sample, sampler):
+        samples = sampler.get_chain(discard=int(sampler.iteration*0.3), thin=1)
+
+        tau = get_integrated_act(samples)
+
+        if self.time > 0:
+            iteration = sampler.iteration
+
+            if iteration >= self.when_to_stop:
+                return True
+            
+            elif iteration < self.when_to_stop and np.isfinite(self.when_to_stop):
+                return False
+
+            finish = []
+
+            for name, values in tau.items():
+                converged = np.all(tau[name] * self.autocorr_multiplier < iteration)
+                converged &= np.all(
+                    np.abs(self.old_tau[name] - tau[name]) / tau[name] < 0.01
+                )
+
+                finish.append(converged)
+
+            if np.all(finish):
+                stop = True
+
+                if self.when_to_stop == np.inf:
+                    self.when_to_stop = iteration + self.n_iter
+            
+            else:
+                stop = False
+                
+            
+            if self.verbose:
+                print(
+                    "\ntau:",
+                    tau,
+                    "\nIteration:",
+                    iteration,
+                    "\nAutocorrelation multiplier:",
+                    self.autocorr_multiplier,
+                    "\nStopping:",
+                    stop,
+                    "\n",
+                )
+
+        else:
+            stop = False
+
+        self.old_tau = tau
+        self.time += 1
+        return stop
+
+
+
+"""
+    def __init__(self, autocorr_multiplier=50, verbose=False):
+            self.autocorr_multiplier = autocorr_multiplier
+            self.verbose = verbose
+
+            self.time = 0
+
+        def __call__(self, iter, last_sample, sampler):
+
+            tau = sampler.backend.get_autocorr_time(multiply_thin=False)
+
+            if self.time > 0:
+                # backend iteration
+                iteration = sampler.backend.iteration
+
+                finish = []
+
+                for name, values in tau.items():
+                    converged = np.all(tau[name] * self.autocorr_multiplier < iteration)
+                    converged &= np.all(
+                        np.abs(self.old_tau[name] - tau[name]) / tau[name] < 0.01
+                    )
+
+                    finish.append(converged)
+
+                stop = True if np.all(finish) else False
+                if self.verbose:
+                    print(
+                        "\ntau:",
+                        tau,
+                        "\nIteration:",
+                        iteration,
+                        "\nAutocorrelation multiplier:",
+                        self.autocorr_multiplier,
+                        "\nStopping:",
+                        stop,
+                        "\n",
+                    )
+
+            else:
+                stop = False
+
+            self.old_tau = tau
+            self.time += 1
+            return stop
+"""
     
