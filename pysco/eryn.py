@@ -5,6 +5,8 @@ import matplotlib as mpl
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 
+import warnings
+
 from eryn.utils import get_integrated_act, psrf, Stopping
 
 
@@ -34,7 +36,7 @@ def adjust_covariance(samp, ndim, svd=False, idxs=1):
     Returns:
     None
     """
-    discard = int(0.8 * samp.iteration)
+    discard = int(0.5 * samp.iteration)
 
     if not isinstance(idxs, list):
         idxs = [idxs]
@@ -53,7 +55,7 @@ def adjust_covariance(samp, ndim, svd=False, idxs=1):
             else:
                 move.all_proposal[key].scale = cov
         
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance_all, true_logl=None, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
+def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance_all=None, true_logl=None, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
     
     """
     Plot various diagnostics for the given samples.
@@ -85,7 +87,6 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance
 
     nwalkers = samp.nwalkers
     ntemps = samp.ntemps
-    steps = np.arange(samp.iteration)
     myred = '#9A0202' 
     tempcolors = pysco.plot.get_colors_from_cmap(ntemps, cmap='inferno', reverse=False)    
                         
@@ -97,14 +98,24 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance
         inds = samp.get_inds(discard=int(samp.iteration*0.3))
         logP = samp.get_log_posterior(discard=int(samp.iteration*0.3), thin=1)[:,0]
 
+        truths_here = truths[key]
+        labels_here = labels[key]
+
+        if nleaves_min[key] == nleaves_max[key]:
+            logl = samp.get_log_like(discard=int(samp.iteration*0.3), thin=1)[:, 0].flatten()
+            truths_here = np.append(truths_here, true_logl)
+            labels_here = np.append(labels_here, r'$\log{\mathcal{L}}$')
+
+            chain = np.column_stack((chain, logl))
+
         if use_chainconsumer:
             try:
                 fig = pysco.plot.chainplot(samples=chain, 
-                                        truths=truths[key], 
-                                        labels=labels[key], 
+                                        truths=truths_here, 
+                                        labels=labels_here, 
                                         names=key,
                                         #logP=logP[inds_mask].flatten(),
-                                        filename=path + 'diagnostic/' + key + suffix,
+                                        filename=path + key + suffix,
                                         return_obj=False, plot_walks=False,
                                         **kwargs,
                                         )
@@ -114,22 +125,22 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance
             except:
                 print('ChainConsumer failed to plot the chains. Falling back to `pysco.plot.corner`.')
                 fig = pysco.plot.corner(chain, 
-                                        truths=truths[key], 
-                                        labels=labels[key], 
+                                        truths=truths_here, 
+                                        labels=labels_here, 
                                         save=True, 
                                         custom_whspace= 0.15, 
-                                        filename=path + 'diagnostic/' + key + '_cornerplot' + suffix, 
+                                        filename=path + key + '_cornerplot' + suffix, 
                                         dpi=150
                                         )
                 plt.close()
 
         else:
             fig = pysco.plot.corner(chain, 
-                                    truths=truths[key], 
-                                    labels=labels[key], 
+                                    truths=truths_here, 
+                                    labels=labels_here, 
                                     save=True, 
                                     custom_whspace= 0.15, 
-                                    filename=path + 'diagnostic/' + key + '_cornerplot' + suffix, 
+                                    filename=path + key + '_cornerplot' + suffix, 
                                     dpi=150,
                                     linestyle='-',
                                     )
@@ -150,7 +161,7 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance
                 if truths[key][i] is not None:
                     axs[i].axhline(truths[key][i], color=myred)
 
-        fig.savefig(path + 'diagnostic/' + key + '_traceplot' + suffix, dpi=150)
+        fig.savefig(path + key + '_traceplot' + suffix, dpi=150)
         plt.close()
 
         #* Plotting RJ diagnostics
@@ -158,13 +169,19 @@ def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance
             plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix)
 
     #* Plotting logL evolution with the number of steps
-    plot_logl(samp, path, nwalkers, suffix, true_logl=true_logl)
+    plot_logl(samp, path, suffix, true_logl=true_logl)
 
     #* Plotting acceptance fraction evolution with the number of steps
-    plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names, suffix=suffix)
+    if acceptance_all is not None:
+        steps = np.arange(len(acceptance_all))
+        plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names, suffix=suffix)
 
     if rj_acceptance_all is not None:
+        steps = np.arange(len(rj_acceptance_all))
         plot_acceptance(steps, path, rj_acceptance_all, rj_acceptance_moves, moves_names=rj_moves_names, suffix='_rj'+suffix)
+
+    #* Plotting the integrated autocorrelation time evolution
+    plot_act_evolution(samp, path, N=10, discard=0, all_T=False, suffix=suffix)
 
 
 def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix=''):
@@ -202,10 +219,10 @@ def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suff
 
     fig.text(0.07, 0.083, f"Step: {samp.iteration}", ha='left', va='top', fontfamily='serif', c='red')
     #plt.title(key)
-    fig.savefig(path + 'diagnostic/leaves_' + key + suffix, dpi=150)
+    fig.savefig(path + 'leaves_' + key + suffix, dpi=150)
     plt.close()
 
-def plot_logl(samp, path, nwalkers, suffix='', true_logl=None):
+def plot_logl(samp, path, suffix='', true_logl=None):
     """
     Plot the log likelihood of the samples.
 
@@ -219,6 +236,7 @@ def plot_logl(samp, path, nwalkers, suffix='', true_logl=None):
     """
     fig = plt.figure()
     logl = samp.get_log_like(discard=int(samp.iteration*0.3), thin=1)
+    nwalkers = logl.shape[2]
     for walk in range(nwalkers):
         #plt.plot(logl[:, 0, walk] - maxlogl[walk], color='k', ls='-', alpha=0.2, lw=1)
         plt.plot(logl[:, 0, walk], color='k', ls='-', alpha=0.2, lw=1)
@@ -226,7 +244,7 @@ def plot_logl(samp, path, nwalkers, suffix='', true_logl=None):
     if true_logl is not None:
         plt.axhline(true_logl, color='r', ls='--', lw=1)
     plt.ylabel(r'$\log{\mathcal{L}}$')
-    fig.savefig(path + 'diagnostic/loglike_evolution'+suffix, dpi=150)
+    fig.savefig(path + 'loglike_evolution'+suffix, dpi=150)
     plt.close()
 
     # plot an histogram of the log likelihood at the current step for the T=1 chain
@@ -240,7 +258,7 @@ def plot_logl(samp, path, nwalkers, suffix='', true_logl=None):
 
     plt.legend()
 
-    fig.savefig(path + 'diagnostic/loglike_hist'+suffix, dpi=150)
+    fig.savefig(path + 'loglike_hist'+suffix, dpi=150)
 
 
 def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=None, suffix=''):
@@ -273,8 +291,56 @@ def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=N
     
     plt.ylabel(r'Acceptance fraction')
     plt.legend()
-    fig.savefig(path + 'diagnostic/acceptance'+suffix, dpi=150)
+    fig.savefig(path + 'acceptance'+suffix, dpi=150)
     plt.close()
+
+
+def plot_act_evolution(samp, path, N=10, discard=0, all_T=False, suffix='', act_kwargs={}):
+
+
+    samples = samp.get_chain(discard=int(discard), thin=1)
+    Npoints = np.exp(np.linspace(np.log(min(100, samp.iteration)), np.log(samp.iteration), N)).astype(int)
+
+    fig = plt.figure()
+    toplim = 0
+
+    for key, color in zip(samples.keys(), pysco.plot.get_colorslist(colors='colors10')):
+        #try:
+        chain = samples[key]
+        nsteps, nt, nw, nleaves, ndim = chain.shape
+
+        chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
+
+        ntemps = chain.shape[1] if all_T else 1
+        tau = np.empty(shape=(len(Npoints), ntemps, chain.shape[-1]))
+
+        try:
+            for i, N in enumerate(Npoints):
+                tau[i] = get_integrated_act(chain[:N, :ntemps], average=True, **act_kwargs)
+
+            for temp in range(ntemps):
+                where_max = np.argmax(tau[:, temp], axis=-1)
+
+                to_plot =np.max(tau[:, temp], axis=-1)
+
+                plt.loglog(Npoints, to_plot, color=color, marker='o', label=key + fr' - $T_{temp}$')
+
+                toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
+        
+        except:
+            warnings.warn(f"Could not compute the auto-correlation times for the branch {key}.")
+        
+    plt.loglog(Npoints, Npoints / 50, label=r'$\tau = N/50$', linestyle='--', color='black')
+
+    plt.xlabel('Number of samples')
+    plt.ylabel(r'$\tau$')
+
+    plt.ylim(0, toplim)
+    plt.legend()
+
+    fig.savefig(path + 'act_evolution' + suffix, dpi=150)
+
+
 
 
 def general_act(sampler, discard=None, all_T=False, return_max=True, act_kwargs={}):
@@ -303,9 +369,12 @@ def general_act(sampler, discard=None, all_T=False, return_max=True, act_kwargs=
     tau_all_dict = get_integrated_act(samples, **act_kwargs)
     tau_all = []
 
-    for values in tau_all_dict.values:
-        values = np.atleast_2d(values)
-        nw, nt = values.shape
+    for values in tau_all_dict.values():
+        
+        values = np.array(values)
+        if len(values.shape) == 2: # (ntemps, ndims)
+            values = values[None, : , :] # (nwalks, ntemps, ndims). Generalized to deal with individual walkers. If ``act_kwargs['average'] = `False` the first dimension is the number of walkers, otherwise it is 1. 
+        
         if not all_T:
             act = values[:, 0]
         
@@ -398,15 +467,45 @@ class GelmanRubinStopping(Stopping):
 
 class AutoCorrelationStopping(Stopping):
     
-    def __init__(self, autocorr_multiplier=50, verbose=False, n_iter=1000):
+    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, ess=None, transform_fn=None):
+        """
+        Stopping criterion based on the auto-correlation time.
+
+        Args:
+            autocorr_multiplier (float): Multiplier for the auto-correlation time. Default is 50.
+            verbose (bool): Whether to print the diagnostic values. Default is False.
+            N (int): Number of iterations to run after convergence. Default is 0, meaning that the run is stopped as soon as the threshold is reached.
+            n_skip (int): Number of iterations to skip before applying the stopping criterion. Default is 0.
+            ess (float): Effective sample size. Default is None.
+            transform_fn (callable): Function to transform the chains before computing the diagnostic. Default is None.
+        """
+
         self.autocorr_multiplier = autocorr_multiplier
         self.verbose = verbose
         self.time = 0
-        self.n_iter = n_iter
+        self.N = N
+        self.n_skip = n_skip
+        self.ess = ess
         self.when_to_stop = np.inf
+        self.transform_fn = transform_fn
 
     def __call__(self, iter, last_sample, sampler):
-        samples = sampler.get_chain(discard=int(sampler.iteration*0.3), thin=1)
+        """
+        Call update function.
+
+        Args:
+            iter (int): Iteration of the sampler.
+            last_sample (obj): Last state of sampler (:class:`eryn.state.State`).
+            sampler (obj): Full sampler oject (:class:`eryn.ensemble.EnsembleSampler`).
+        
+        Returns:
+            bool: ``True`` if the stopping criterion is met, ``False`` otherwise. 
+
+        """
+        samples = sampler.get_chain(discard=0, thin=1)
+
+        if self.transform_fn is not None:
+            samples = self.transform_fn(samples)
 
         tau = get_integrated_act(samples)
 
@@ -432,8 +531,13 @@ class AutoCorrelationStopping(Stopping):
             if np.all(finish):
                 stop = True
 
+                tau_max = np.max([np.max(tau[name]) for name in tau.keys()])
+                if self.ess is not None:
+                    nw = last_sample.log_like.shape[1]
+                    self.N = self.get_N_from_ess(nw, tau_max)           
+
                 if self.when_to_stop == np.inf:
-                    self.when_to_stop = iteration + self.n_iter
+                    self.when_to_stop = max(self.n_skip, int(iteration / 10) + self.N)
             
             else:
                 stop = False
@@ -457,54 +561,19 @@ class AutoCorrelationStopping(Stopping):
 
         self.old_tau = tau
         self.time += 1
-        return stop
-
-
-
-"""
-    def __init__(self, autocorr_multiplier=50, verbose=False):
-            self.autocorr_multiplier = autocorr_multiplier
-            self.verbose = verbose
-
-            self.time = 0
-
-        def __call__(self, iter, last_sample, sampler):
-
-            tau = sampler.backend.get_autocorr_time(multiply_thin=False)
-
-            if self.time > 0:
-                # backend iteration
-                iteration = sampler.backend.iteration
-
-                finish = []
-
-                for name, values in tau.items():
-                    converged = np.all(tau[name] * self.autocorr_multiplier < iteration)
-                    converged &= np.all(
-                        np.abs(self.old_tau[name] - tau[name]) / tau[name] < 0.01
-                    )
-
-                    finish.append(converged)
-
-                stop = True if np.all(finish) else False
-                if self.verbose:
-                    print(
-                        "\ntau:",
-                        tau,
-                        "\nIteration:",
-                        iteration,
-                        "\nAutocorrelation multiplier:",
-                        self.autocorr_multiplier,
-                        "\nStopping:",
-                        stop,
-                        "\n",
-                    )
-
-            else:
-                stop = False
-
-            self.old_tau = tau
-            self.time += 1
-            return stop
-"""
+        return False
     
+
+    def get_N_from_ess(self, nw, tau):
+        """
+        Get the number of samples from the effective sample size.
+
+        Args:
+            nw (int): Number of walkers.
+            tau (float): Auto-correlation time.
+
+        Returns:
+            int: Target number of samples.
+        """
+        
+        return int(np.ceil(self.ess * nw * tau))
