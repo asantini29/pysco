@@ -23,36 +23,37 @@ def get_clean_chain(coords, ndim, temp=0):
         ]  # Discard the NaNs, each time they change the shape of the samples_in
     return samples_in
 
-def adjust_covariance(samp, ndim, svd=False, idxs=1):
+def adjust_covariance(samp, discard=0.8, svd=False, skip_idxs=[]):
     """
     Adjusts the covariance matrix for each branch in the given sample.
 
     Parameters:
-    - samp: The sample object containing the chains.
-    - ndim: A dictionary containing the number of dimensions for each branch.
-    - svd: A boolean indicating whether to perform singular value decomposition (SVD) on the covariance matrix. Default is False.
-    - idxs: The indeces of the move in the sample object. Default is 1.
+    samp (Sampler): The sampler object.
+    discard (float, optional): The fraction of iterations to discard. Defaults to 0.8.
+    svd (bool, optional): Whether to perform singular value decomposition on the covariance matrix. Defaults to False.
+    skip_idxs (list, optional): List of indices to skip. Defaults to an empty list.
 
     Returns:
     None
     """
-    discard = int(0.5 * samp.iteration)
 
-    if not isinstance(idxs, list):
-        idxs = [idxs]
-    
-    for idx in idxs:
-        move = samp.moves[idx]
-        branches = move.all_proposal.keys()
+    discard = int(discard * samp.iteration)
+    ndims = samp.ndims
+    accept_update = ['GaussianMove'] #moves which have a covariance matrix to adjust
 
-        for key in branches:
-            item_samp = samp.get_chain(discard=discard)[key][:, 0][samp.get_inds(discard=discard)[key][:, 0]]
-        
-            cov = np.cov(item_samp, rowvar=False) * 2.38**2 / ndim[key]
-            if svd:
-                svd = np.linalg.svd(cov)
-                move.all_proposal[key].svd = svd
-            else:
+    for i, move in enumerate(samp.moves):
+        #if hasattr(move, 'all_proposal') and i not in skip_idxs:
+        if move.__name__ in accept_update and i not in skip_idxs:
+            branches = move.all_proposal.keys()
+
+            for key in branches:
+                item_samp = samp.get_chain(discard=discard)[key][:, 0][samp.get_inds(discard=discard)[key][:, 0]]
+            
+                cov = np.cov(item_samp, rowvar=False) * 2.38**2 / ndims[key]
+                if svd:
+                    svd = np.linalg.svd(cov)
+                    move.all_proposal[key].svd = svd
+                
                 move.all_proposal[key].scale = cov
 
 
@@ -232,12 +233,12 @@ class DiagnosticPlotter:
             plt.close()
 
             if trace:
-                fig, axs = plt.subplots(self.sampler.ndims[key], 1)
+                fig, axs = plt.subplots(self.sampler.ndims[key], 1, sharex=True)
                 fig.set_size_inches(20, 20)
 
                 for i in range(ndims):
                     for walk in range(self.nw):
-                        axs[i].plot(samples_here[:, 0, walk, :, i], ls='-', alpha=0.9, lw=1)
+                        axs[i].plot(samples_here[:, 0, walk, :, i], ls='-', alpha=0.7, lw=1)
 
                     axs[i].set_ylabel(self.labels[key][i])
 
@@ -386,7 +387,7 @@ class DiagnosticPlotter:
 
                     to_plot =np.max(tau[:, temp], axis=-1)
 
-                    plt.loglog(Npoints, to_plot, color=color, marker='x', alpha=0.9, label=key + fr' - $T_{temp}$')
+                    plt.loglog(Npoints, to_plot, color=color, marker='o', alpha=0.9, label=key + fr' - $T_{temp}$')
 
                     toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
                 
@@ -416,7 +417,7 @@ class DiagnosticPlotter:
         """
         fig = plt.figure()
         for walk in range(self.nw):
-            plt.plot(logl[:, 0, walk], ls='-', alpha=0.9, lw=1)
+            plt.plot(logl[:, 0, walk], ls='-', alpha=0.7, lw=1)
 
         if self.true_logl is not None:
             plt.axhline(self.true_logl, color='k', ls='--', lw=2)
@@ -947,4 +948,4 @@ class AutoCorrelationStopping(Stopping):
             int: Target number of samples.
         """
         
-        return int(np.ceil(self.ess * nw * tau))
+        return int(np.ceil(self.ess * tau / nw))
