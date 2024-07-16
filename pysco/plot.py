@@ -452,7 +452,7 @@ def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=
 
         # Add the truth values
         c.add_truth(chainconsumer.Truth(location=truths, color='k'))
-        c.add_marker(location=truths, name="Truth", color="k", marker_style="x", marker_size=30)
+        # c.add_marker(location=truths, name="Truth", color="k", marker_style="x", marker_size=30)
     
     c.set_override(chainconsumer.ChainConfig(
         sigmas=[0, 1, 2],
@@ -469,6 +469,8 @@ def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=
                     tick_font_size=12,
                     label_font_size=plt.rcParams['font.size'],
                     summary_font_size=plt.rcParams['font.size'],
+                    contour_label_font_size=plt.rcParams['font.size'],
+                    spacing=3.0,
                     usetex=True,
                     serif=True,
                     dpi=plt.rcParams['savefig.dpi'],

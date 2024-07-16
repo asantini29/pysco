@@ -9,6 +9,12 @@ import warnings
 
 from eryn.utils import get_integrated_act, psrf, Stopping
 
+def get_numpy(x):
+    try:
+        return x.get()
+    except:
+        return np.asarray(x)
+
 
 def get_clean_chain(coords, ndim, temp=0):
     """Simple utility function to extract the squeezed chains for all the parameters
@@ -23,7 +29,7 @@ def get_clean_chain(coords, ndim, temp=0):
         ]  # Discard the NaNs, each time they change the shape of the samples_in
     return samples_in
 
-def adjust_covariance(samp, discard=0.8, svd=False, skip_idxs=[]):
+def adjust_covariance(samp, discard=0.8, svd=False, lr=None, skip_idxs=[]):
     """
     Adjusts the covariance matrix for each branch in the given sample.
 
@@ -32,7 +38,10 @@ def adjust_covariance(samp, discard=0.8, svd=False, skip_idxs=[]):
     discard (float, optional): The fraction of iterations to discard. Defaults to 0.8.
     svd (bool, optional): Whether to perform singular value decomposition on the covariance matrix. Defaults to False.
     skip_idxs (list, optional): List of indices to skip. Defaults to an empty list.
-
+    lr (float, optional): The learning rate for the covariance matrix adjustment. Defaults to None. 
+                          If None, the covariance matrix is computed from the samples. Else, the covariance matrix is 
+                          adjusted by a factor of `lr`.
+                          
     Returns:
     None
     """
@@ -43,19 +52,55 @@ def adjust_covariance(samp, discard=0.8, svd=False, skip_idxs=[]):
 
     for i, move in enumerate(samp.moves):
         #if hasattr(move, 'all_proposal') and i not in skip_idxs:
-        if move.__name__ in accept_update and i not in skip_idxs:
+        name = move.__class__.__name__
+        if name in accept_update and i not in skip_idxs:
             branches = move.all_proposal.keys()
 
             for key in branches:
-                item_samp = samp.get_chain(discard=discard)[key][:, 0][samp.get_inds(discard=discard)[key][:, 0]]
-            
-                cov = np.cov(item_samp, rowvar=False) * 2.38**2 / ndims[key]
+
+                if lr is not None:
+                    acceptance = np.mean(move.acceptance_fraction[0]) 
+                    signed_lr = lr if acceptance > 0.234 else -lr
+                    cov = move.all_proposal[key].scale * (1 + signed_lr) 
+                else:
+                    item_samp = samp.get_chain(discard=discard)[key][:, 0][samp.get_inds(discard=discard)[key][:, 0]]
+                    cov = np.cov(item_samp, rowvar=False) * 2.38**2 / ndims[key]
+
                 if svd:
                     svd = np.linalg.svd(cov)
                     move.all_proposal[key].svd = svd
                 
                 move.all_proposal[key].scale = cov
 
+def adjust_gamma0(samp, skip_idxs=[]):
+    """
+    Adjusts the ``gamma_0`` parameter for the given sample.
+
+    Parameters:
+    samp (Sampler): The sampler object.
+    skip_idxs (list, optional): List of indices to skip. Defaults to an empty list.
+
+    Returns:
+    None
+    """
+    
+    accept_update = ['DEMove'] #moves which have a ``gamma_0`` parameter to adjust
+    for i, move in enumerate(samp.moves):
+        name = move.__class__.__name__
+        if name in accept_update and i not in skip_idxs:
+
+            acceptance = np.mean(move.acceptance_fraction[0])
+            factor = np.sqrt(acceptance / 0.234)
+
+            factor = 0.1 if factor < 1e-5 else factor
+
+            if isinstance(move.g0, dict):
+                for key in move.g0.keys():
+                    print(f"Adjusting gamma_0 for {key}: old = {move.g0[key]}, new = {move.g0[key] * factor}")
+                    move.g0[key] = move.g0[key] * factor
+            
+            else:
+                move.g0 = move.g0 * factor
 
 class DiagnosticPlotter:
     """
@@ -70,6 +115,7 @@ class DiagnosticPlotter:
     - true_logl: The true log likelihood value.
     - discard: The fraction of iterations to discard before plotting.
     - suffix: A suffix to append to the filenames of the diagnostic plots.
+    - converter: A callable object to convert the samples to a different basis.
 
     Methods:
     - setup(sampler): Set up the diagnostic plotter with the given sampler.
@@ -79,7 +125,7 @@ class DiagnosticPlotter:
     - plot_leaves_hist(): Plot the histogram of the number of leaves for each temperature.
     """
 
-    def __init__(self, sampler, path, truths, labels, transform_all=None, true_logl=None, discard=0.3, suffix='') -> None:
+    def __init__(self, sampler, path, truths, labels, transform_all=None, true_logl=None, discard=0.3, suffix='', converter=None) -> None:
         self.sampler = sampler
         self.path = path
         self.truths = truths
@@ -88,6 +134,8 @@ class DiagnosticPlotter:
         self.discard = discard
         self.true_logl = true_logl
         self.suffix = suffix
+        self.converter = converter
+
         self.setup(sampler)
 
     def setup(self, sampler):
@@ -138,7 +186,7 @@ class DiagnosticPlotter:
                     label = move.label
                 except:
                     label = f'Move {i}'
-                self.acceptance_moves[label] = []
+                self.acceptance_moves[label] = np.array([])
 
             if self.has_rj:
                 self.rj_acceptance_all = []
@@ -149,7 +197,7 @@ class DiagnosticPlotter:
                         label = move.label
                     except:
                         label = f'Move {i}'
-                    self.rj_acceptance_moves[label] = []
+                    self.rj_acceptance_moves[label] = np.array([])
 
         else:
             # The sampler is already set up or a valid sampler was not provided
@@ -160,6 +208,7 @@ class DiagnosticPlotter:
         Perform various plotting operations based on the current state of the sampler.
 
         Parameters:
+        - return_samples (bool): Whether to return the samples and log likelihood values. Defaults to False.
         - kwargs: Additional keyword arguments to be passed to the plotting functions.
 
         Returns:
@@ -220,16 +269,16 @@ class DiagnosticPlotter:
 
                 chain = np.column_stack((chain, logl))
 
-                fig = pysco.plot.corner(chain,
-                                        truths=truths_here,
-                                        labels=labels_here,
-                                        save=True,
-                                        custom_whspace=0.15,
-                                        filename=self.path + key + '_cornerplot' + self.suffix,
-                                        dpi=150,
-                                        linestyle='-',
-                                        **kwargs
-                                        )
+            fig = pysco.plot.corner(chain,
+                                    truths=truths_here,
+                                    labels=labels_here,
+                                    save=True,
+                                    custom_whspace=0.15,
+                                    filename=self.path + key + '_cornerplot' + self.suffix,
+                                    dpi=150,
+                                    linestyle='-',
+                                    **kwargs
+                                    )
             plt.close()
 
             if trace:
@@ -248,6 +297,36 @@ class DiagnosticPlotter:
                 fig.savefig(self.path + key + '_traceplot' + self.suffix, dpi=150)
                 plt.close()
 
+        if self.converter is not None:
+            new_samples = get_numpy(self.converter(samples)[0])
+            #todo look at the shape of the samples
+            nsteps, ntemps, nw = new_samples.shape[:3]
+            new_samples = new_samples.reshape(nsteps, ntemps, nw, -1)
+            new_samples_flat = new_samples[:, 0].reshape(nsteps * nw, -1)
+            fig = pysco.plot.corner(new_samples_flat,
+                                    # truths=truths_here,
+                                    # labels=labels_here,
+                                    save=True,
+                                    custom_whspace=0.15,
+                                    filename=self.path + 'converter_cornerplot' + self.suffix,
+                                    dpi=150,
+                                    linestyle='-',
+                                    **kwargs
+                                    )
+
+            fig, axs = plt.subplots(new_samples.shape[-1], 1, sharex=True)
+            fig.set_size_inches(20, 20)
+
+            for i in range(new_samples.shape[-1]):
+                for walk in range(nw):
+                    axs[i].plot(new_samples[:, 0, walk, i], ls='-', alpha=0.7, lw=1)
+
+                axs[i].set_ylabel('Parameter ' + str(i))
+
+                
+            fig.savefig(self.path + 'converter_traceplot' + self.suffix, dpi=150)
+            plt.close()
+
     def plot_acceptance(self):
         """
         Plot the acceptance fraction for each update step in the MCMC sampling process.
@@ -262,19 +341,18 @@ class DiagnosticPlotter:
         self.acceptance_all.append(np.mean(self.sampler.acceptance_fraction[0]))
 
         plt.plot(self.steps, self.acceptance_all, color='k', label='Total', marker='x', lw=1)
-
+        
         for i, move in enumerate(self.sampler.moves):
             try:
                 label = move.label
             except:
                 label = f'Move {i}'
-            self.acceptance_moves[label].append(np.mean(move.acceptance_fraction[0]))
+            
+            self.acceptance_moves[label] = np.concatenate((self.acceptance_moves[label], np.atleast_1d(np.mean(move.acceptance_fraction[0]))))
 
-            acceptance = np.array(self.acceptance_moves[label])
+            nanmask = np.isnan(self.acceptance_moves[label])
 
-            nanmask = np.isnan(acceptance)
-
-            plt.plot(steps[~nanmask], acceptance[~nanmask], label=label, marker='x', lw=1)
+            plt.plot(steps[~nanmask], self.acceptance_moves[label][~nanmask], label=label, marker='x', lw=1)
 
         plt.axhline(0.234, color='k', ls='--', lw=2, label=r'$\alpha=23.4\%$')
 
@@ -289,17 +367,17 @@ class DiagnosticPlotter:
             self.rj_acceptance_all.append(np.mean(self.sampler.rj_acceptance_fraction[0]))
 
             plt.plot(self.steps, self.rj_acceptance_all, color='k', label='Total', marker='x')
-
+            
             for i, move in enumerate(self.sampler.rj_moves):
                 try:
                     label = move.label
                 except:
                     label = f'Move {i}'
-                self.rj_acceptance_moves[label].append(np.mean(move.acceptance_fraction[0]))
+                self.rj_acceptance_moves[label] = np.concatenate((self.rj_acceptance_moves[label], np.atleast_1d(np.mean(move.acceptance_fraction[0]))))
 
                 nanmask = np.isnan(self.rj_acceptance_moves[label])
 
-                plt.plot(self.steps[~nanmask], self.rj_acceptance_moves[label][~nanmask], label=label, marker='x')
+                plt.plot(steps[~nanmask], self.rj_acceptance_moves[label][~nanmask], label=label, marker='x', lw=1)
 
             plt.xlabel(r'$N_{\rm steps}$')
             plt.ylabel(r'RJ Acceptance fraction')
@@ -366,15 +444,35 @@ class DiagnosticPlotter:
         toplim = 0
 
         samples = self.sampler.get_chain(discard=0, thin=1)
+        inds = self.sampler.get_inds(discard=0, thin=1)
         Npoints = np.exp(np.linspace(np.log(min(100, self.sampler.iteration)), np.log(self.sampler.iteration), N)).astype(int)
 
-        for key, color in zip(samples.keys(), pysco.plot.get_colorslist(colors='colors10')):
+        extra_keys = ['logl']
+        extra_colors = ['lightgray']
+        if self.converter is not None:
+            extra_keys.append('converted')
+            extra_colors.append('darkgray')
 
-            chain = samples[key]
-            nsteps, nt, nw, nleaves, ndim = chain.shape
+        for key, color in zip(extra_keys + list(samples.keys()), extra_colors + pysco.plot.get_colorslist(colors='colors10')):
 
-            chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
+            if key == 'logl':
+                chain = self.sampler.get_log_like(discard=0, thin=1)
+                nsteps, nt, nw = chain.shape
+                key = r'$\log{\mathcal{L}}$'   
+                ls = '--'
 
+            elif key == 'converted':
+                chain = get_numpy(self.converter(samples)[0])
+                nsteps, nt, nw = chain.shape[:3]
+                chain = chain.reshape(nsteps, nt, nw, -1)
+                key = 'converted'
+                ls = '-.'
+
+            else:
+                chain = samples[key]
+                nsteps, nt, nw, nleaves, ndim = chain.shape
+                chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
+                ls = '-'
             ntemps = chain.shape[1] if all_T else 1
             tau = np.empty(shape=(len(Npoints), ntemps, chain.shape[-1]))
 
@@ -387,7 +485,7 @@ class DiagnosticPlotter:
 
                     to_plot =np.max(tau[:, temp], axis=-1)
 
-                    plt.loglog(Npoints, to_plot, color=color, marker='o', alpha=0.9, label=key + fr' - $T_{temp}$')
+                    plt.loglog(Npoints, to_plot, color=color, marker='o', ls=ls, alpha=0.9, label=key + fr' - $T_{temp}$')
 
                     toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
                 
@@ -676,13 +774,17 @@ def plot_act_evolution(samp, path, N=10, discard=0, all_T=False, suffix='', act_
     fig = plt.figure()
     toplim = 0
 
-    for key, color in zip(samples.keys(), pysco.plot.get_colorslist(colors='colors10')):
-        #try:
-        chain = samples[key]
-        nsteps, nt, nw, nleaves, ndim = chain.shape
-
-        chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
-
+    for key, color in zip(['logl'] + list(samples.keys()), ['gray'] + pysco.plot.get_colorslist(colors='colors10')):
+        if key == 'logl':
+            chain = samp.get_log_like(discard=int(discard), thin=1)
+            nsteps, nt, nw = chain.shape
+            key = r'$\log{\mathcal{L}}$'   
+            ls = '--'
+        else:
+            chain = samples[key]
+            nsteps, nt, nw, nleaves, ndim = chain.shape
+            chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
+            ls = '-'
         ntemps = chain.shape[1] if all_T else 1
         tau = np.empty(shape=(len(Npoints), ntemps, chain.shape[-1]))
 
@@ -695,13 +797,13 @@ def plot_act_evolution(samp, path, N=10, discard=0, all_T=False, suffix='', act_
 
                 to_plot =np.max(tau[:, temp], axis=-1)
 
-                plt.loglog(Npoints, to_plot, color=color, marker='o', label=key + fr' - $T_{temp}$')
+                plt.loglog(Npoints, to_plot, color=color, marker='o', ls=ls, label=key + fr' - $T_{temp}$')
 
                 toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
         
         except:
             warnings.warn(f"Could not compute the auto-correlation times for the branch {key}.")
-        
+    
     plt.loglog(Npoints, Npoints / 50, label=r'$\tau = N/50$', linestyle='--', color='black')
 
     plt.xlabel('Number of samples')
