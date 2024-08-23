@@ -4,10 +4,14 @@ import pysco
 import matplotlib as mpl
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
+import pandas as pd
+from .utils import find_files
 
 import warnings
 
 from eryn.utils import get_integrated_act, psrf, Stopping
+from eryn.backends import HDFBackend
+from eryn import moves
 
 def get_numpy(x):
     try:
@@ -136,6 +140,8 @@ class DiagnosticPlotter:
         self.suffix = suffix
         self.converter = converter
 
+        self.mixture_here = False
+
         self.setup(sampler)
 
     def setup(self, sampler):
@@ -187,6 +193,10 @@ class DiagnosticPlotter:
                 except:
                     label = f'Move {i}'
                 self.acceptance_moves[label] = np.array([])
+
+                if isinstance(move, moves.GaussianMixtureProposal):
+                    self.mixture_here = True
+                    self.mixture_idx = i
 
             if self.has_rj:
                 self.rj_acceptance_all = []
@@ -250,6 +260,10 @@ class DiagnosticPlotter:
         Returns:
         None
         """
+        if self.mixture_here:
+            mix_move = self.sampler.moves[self.mixture_idx]
+            dgpmm_dict = mix_move.dpgmms
+
         for key in self.sampler.branch_names:
             ndims = self.sampler.ndims[key]
 
@@ -263,7 +277,7 @@ class DiagnosticPlotter:
             truths_here = self.truths[key]
             labels_here = self.labels[key]
 
-            if self.nleaves_min[key] == self.nleaves_max[key]:
+            if self.nleaves_min[key] == self.nleaves_max[key] == 1:
                 truths_here = np.append(truths_here, self.true_logl)
                 labels_here = np.append(labels_here, r'$\log{\mathcal{L}}$')
 
@@ -272,13 +286,40 @@ class DiagnosticPlotter:
             fig = pysco.plot.corner(chain,
                                     truths=truths_here,
                                     labels=labels_here,
-                                    save=True,
+                                    save=False,
                                     custom_whspace=0.15,
                                     filename=self.path + key + '_cornerplot' + self.suffix,
                                     dpi=150,
                                     linestyle='-',
                                     **kwargs
                                     )
+            
+            if self.mixture_here:
+                ndim = chain.shape[-1]
+                dpgmm = dgpmm_dict[key]
+                covs = dpgmm.covariances_
+                means = dpgmm.means_
+
+                # Plot the ellipses
+                if dpgmm.n_components > 1:
+                    for i in range(dpgmm.n_components):
+                        cov = covs[i]
+                        mean = means[i]
+                        v, w = np.linalg.eigh(cov)
+                        v = 2. * np.sqrt(2.) * np.sqrt(v)
+
+                        for j in range(cov.shape[0] // 2):
+                            j = 2*j
+                            u = w[j] / np.linalg.norm(w[j])
+                            angle = np.arctan(u[j+1] / u[j])
+                            angle = 180. * angle / np.pi
+
+                            ell = mpl.patches.Ellipse(xy=mean, width=v[j], height=v[j+1], angle=180. + angle, color='k', facecolor='none', alpha=0.5)
+                            fig.axes[ndim].add_patch(ell)
+                            fig.axes[ndim].plot(mean[0], mean[1], 'x', color='k', alpha=0.5)
+
+            fig.savefig(self.path + key + '_cornerplot' + self.suffix, dpi=150)
+
             plt.close()
 
             if trace:
@@ -485,7 +526,10 @@ class DiagnosticPlotter:
 
                     to_plot =np.max(tau[:, temp], axis=-1)
 
-                    plt.loglog(Npoints, to_plot, color=color, marker='o', ls=ls, alpha=0.9, label=key + fr' - $T_{temp}$')
+                    if np.any(np.isnan(to_plot)):
+                        warnings.warn(f"Auto-correlation time for branch {key} and temperature {temp} contains NaN values.")
+                    else:
+                        plt.loglog(Npoints, to_plot, color=color, marker='o', ls=ls, alpha=0.9, label=key + fr' - $T_{temp}$')
 
                     toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
                 
@@ -523,297 +567,6 @@ class DiagnosticPlotter:
         fig.savefig(self.path + 'loglike_evolution' + self.suffix, dpi=150)
 
         plt.close()
-
-        
-def plot_diagnostics(samp, path, ndim, truths, labels, transform_all, acceptance_all=None, true_logl=None, trace_color=None, acceptance_moves=None, rj_acceptance_all=None, rj_acceptance_moves=None, rj_branches=[], nleaves_min=None, nleaves_max=None, moves_names=None, rj_moves_names=None, use_chainconsumer=False, suffix='', **kwargs):
-    
-    """
-    Plot various diagnostics for the given samples.
-
-    Parameters:
-    - samp: The samples object containing the chains.
-    - path: The path to save the diagnostic plots.
-    - ndim: A dictionary mapping the keys to the number of dimensions for each chain.
-    - truths: A dictionary mapping the keys to the true values for each parameter.
-    - labels: A dictionary mapping the keys to the labels for each parameter.
-    - transform_all: A dictionary mapping the keys to the transformation functions to apply to the chains.
-    - acceptance_all: The acceptance fraction for all moves.
-    - trace_color: The color to use for the trace plots.
-    - acceptance_moves: The acceptance fraction for each move.
-    - rj_acceptance_all: The acceptance fraction for all RJ moves.
-    - rj_acceptance_moves: The acceptance fraction for each RJ move.
-    - rj_branches: The keys of the branches to plot RJ diagnostics for.
-    - nleaves_min: The minimum number of leaves for the RJ diagnostics.
-    - nleaves_max: The maximum number of leaves for the RJ diagnostics.
-    - moves_names: The names of the moves for the acceptance fraction plot.
-    - rj_moves_names: The names of the RJ moves for the acceptance fraction plot.
-    - use_chainconsumer: Whether to use ChainConsumer for plotting.
-    - suffix: The suffix to add to the plot filenames.
-    - kwargs: Additional keyword arguments to pass to the plotting functions.
-
-    Returns:
-    None
-    """
-
-    nwalkers = samp.nwalkers
-    ntemps = samp.ntemps
-    myred = '#9A0202' 
-    tempcolors = pysco.plot.get_colors_from_cmap(ntemps, cmap='inferno', reverse=False)    
-                        
-    for key in samp.branch_names:
-        #check_latex()
-        chain = get_clean_chain(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key], ndim=ndim[key])
-        chain = transform_all[key].transform_base_parameters(chain)
-
-        inds = samp.get_inds(discard=int(samp.iteration*0.3))
-        logP = samp.get_log_posterior(discard=int(samp.iteration*0.3), thin=1)[:,0]
-
-        truths_here = truths[key]
-        labels_here = labels[key]
-
-        if nleaves_min[key] == nleaves_max[key]:
-            logl = samp.get_log_like(discard=int(samp.iteration*0.3), thin=1)[:, 0].flatten()
-            truths_here = np.append(truths_here, true_logl)
-            labels_here = np.append(labels_here, r'$\log{\mathcal{L}}$')
-
-            chain = np.column_stack((chain, logl))
-
-        if use_chainconsumer:
-            try:
-                fig = pysco.plot.chainplot(samples=chain, 
-                                        truths=truths_here, 
-                                        labels=labels_here, 
-                                        names=key,
-                                        #logP=logP[inds_mask].flatten(),
-                                        filename=path + key + suffix,
-                                        return_obj=False, plot_walks=False,
-                                        **kwargs,
-                                        )
-                        
-                plt.close()
-
-            except:
-                print('ChainConsumer failed to plot the chains. Falling back to `pysco.plot.corner`.')
-                fig = pysco.plot.corner(chain, 
-                                        truths=truths_here, 
-                                        labels=labels_here, 
-                                        save=True, 
-                                        custom_whspace= 0.15, 
-                                        filename=path + key + '_cornerplot' + suffix, 
-                                        dpi=150
-                                        )
-                plt.close()
-
-        else:
-            fig = pysco.plot.corner(chain, 
-                                    truths=truths_here, 
-                                    labels=labels_here, 
-                                    save=True, 
-                                    custom_whspace= 0.15, 
-                                    filename=path + key + '_cornerplot' + suffix, 
-                                    dpi=150,
-                                    linestyle='-',
-                                    )
-            plt.close()
-
-        #check_latex()
-        fig, axs = plt.subplots(ndim[key], 1)
-        fig.set_size_inches(20, 20)
-        for i in range(ndim[key]):
-            for walk in range(nwalkers):
-                chain = transform_all[key].transform_base_parameters(samp.get_chain(discard=int(samp.iteration*0.3), thin=1)[key])
-                if trace_color is not None:
-                    axs[i].plot(chain[:, 0, walk, :, i], color = trace_color, ls='-', alpha = 0.2)
-                else:
-                    axs[i].plot(chain[:, 0, walk, :, i], ls='-', alpha = 1)
-                axs[i].set_ylabel(labels[key][i])
-
-                if truths[key][i] is not None:
-                    axs[i].axhline(truths[key][i], color=myred)
-
-        fig.savefig(path + key + '_traceplot' + suffix, dpi=150)
-        plt.close()
-
-        #* Plotting RJ diagnostics
-        if key in rj_branches:
-            plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix)
-
-    #* Plotting logL evolution with the number of steps
-    plot_logl(samp, path, suffix, true_logl=true_logl)
-
-    #* Plotting acceptance fraction evolution with the number of steps
-    if acceptance_all is not None:
-        steps = np.arange(len(acceptance_all))
-        plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=moves_names, suffix=suffix)
-
-    if rj_acceptance_all is not None:
-        steps = np.arange(len(rj_acceptance_all))
-        plot_acceptance(steps, path, rj_acceptance_all, rj_acceptance_moves, moves_names=rj_moves_names, suffix='_rj'+suffix)
-
-    #* Plotting the integrated autocorrelation time evolution
-    plot_act_evolution(samp, path, N=10, discard=0, all_T=False, suffix=suffix)
-
-
-def plot_leaves_hist(samp, key, path, tempcolors, nleaves_min, nleaves_max, suffix=''):
-    """
-    Plots a histogram of the number of leaves for each temperature in the given sample.
-
-    Parameters:
-    - samp (Sample): The sample object containing the data.
-    - key (str): The key representing the specific data to plot.
-    - path (str): The path to save the generated plot.
-    - tempcolors (list): A list of colors for each temperature.
-
-    Returns:
-    - None
-    """
-    nleaves_rj = samp.get_nleaves()[key] 
-    bns = (np.arange(nleaves_min[key], nleaves_max[key] + 2) - 0.5)
-
-    fig = plt.figure()
-
-    for temp, tempcolor in enumerate(tempcolors):
-        plt.hist(nleaves_rj[:, temp].flatten(), bins=bns, histtype="stepfilled", edgecolor=tempcolor, facecolor=to_rgba(tempcolor, 0.2), density=True, ls='-', zorder=100-temp)
-    
-    plt.xlabel('Number of leaves')
-    plt.ylabel('Density')
-    # Create legend entry for temperature colors
-    legend_colors = [to_rgba(tempcolor, 0.2) for tempcolor in tempcolors[::-1]]
-    legend_labels = ['' for _ in range(len(tempcolors))]
-    legend_labels[0] = r' $T_i$'
-    legend_handles = [plt.Rectangle((0, 0), 1, 1, color=color) for color in legend_colors]
-    legend_entry = plt.legend(legend_handles, legend_labels, loc='upper right', ncol=len(tempcolors), mode='expand', frameon=False, framealpha=0, bbox_to_anchor=(0.8, 0.95))
-
-    # Add legend entry to the plot
-    plt.gca().add_artist(legend_entry)
-
-    fig.text(0.07, 0.083, f"Step: {samp.iteration}", ha='left', va='top', fontfamily='serif', c='red')
-    #plt.title(key)
-    fig.savefig(path + 'leaves_' + key + suffix, dpi=150)
-    plt.close()
-
-def plot_logl(samp, path, suffix='', true_logl=None):
-    """
-    Plot the log likelihood of the samples.
-
-    Parameters:
-    samp (object): The samples object.
-    path (str): The path to save the plot.
-    nwalkers (int): The number of walkers.
-
-    Returns:
-    None
-    """
-    fig = plt.figure()
-    logl = samp.get_log_like(discard=int(samp.iteration*0.3), thin=1)
-    nwalkers = logl.shape[2]
-    for walk in range(nwalkers):
-        #plt.plot(logl[:, 0, walk] - maxlogl[walk], color='k', ls='-', alpha=0.2, lw=1)
-        plt.plot(logl[:, 0, walk], color='k', ls='-', alpha=0.2, lw=1)
-
-    if true_logl is not None:
-        plt.axhline(true_logl, color='r', ls='--', lw=1)
-    plt.ylabel(r'$\log{\mathcal{L}}$')
-    fig.savefig(path + 'loglike_evolution'+suffix, dpi=150)
-    plt.close()
-
-    # plot an histogram of the log likelihood at the current step for the T=1 chain
-    logl_here = logl[-1, 0, :].flatten()
-    
-    fig = plt.figure()
-    plt.hist(logl_here, bins=int(nwalkers/3), histtype='step', color='k', alpha=1, lw=2, density=True, label=f"Step: {samp.iteration}")
-    if true_logl is not None:
-        plt.axvline(true_logl, color='k', ls='--', lw=2)
-    plt.xlabel(r'$\log{\mathcal{L}}$')
-
-    plt.legend()
-
-    fig.savefig(path + 'loglike_hist'+suffix, dpi=150)
-
-
-def plot_acceptance(steps, path, acceptance_all, acceptance_moves, moves_names=None, suffix=''):
-    """
-    Plot the acceptance fraction for a given number of steps.
-    
-    Parameters:
-    - steps (array-like): The steps for which the acceptance fraction is calculated.
-    - path (str): The path where the plot will be saved.
-    - acceptance_all (array-like): The acceptance fraction for all proposals.
-    - acceptance_moves (list of array-like): The acceptance fraction for each proposal move.
-    
-    Returns:
-    None
-    """
-    fig = plt.figure()                    
-    plt.semilogy(steps, acceptance_all, color='k', label='Total')
-    
-    if acceptance_moves is not None:
-        for i, move in enumerate(acceptance_moves):
-            move = np.array(move)
-            nanmask = np.isnan(move)
-
-            if moves_names is not None:
-                label = moves_names[i]
-            else:
-                label = f'Move {i}'
-
-            plt.semilogy(steps[~nanmask], move[~nanmask], label=label)
-    
-    plt.ylabel(r'Acceptance fraction')
-    plt.legend()
-    fig.savefig(path + 'acceptance'+suffix, dpi=150)
-    plt.close()
-
-
-def plot_act_evolution(samp, path, N=10, discard=0, all_T=False, suffix='', act_kwargs={}):
-
-
-    samples = samp.get_chain(discard=int(discard), thin=1)
-    Npoints = np.exp(np.linspace(np.log(min(100, samp.iteration)), np.log(samp.iteration), N)).astype(int)
-
-    fig = plt.figure()
-    toplim = 0
-
-    for key, color in zip(['logl'] + list(samples.keys()), ['gray'] + pysco.plot.get_colorslist(colors='colors10')):
-        if key == 'logl':
-            chain = samp.get_log_like(discard=int(discard), thin=1)
-            nsteps, nt, nw = chain.shape
-            key = r'$\log{\mathcal{L}}$'   
-            ls = '--'
-        else:
-            chain = samples[key]
-            nsteps, nt, nw, nleaves, ndim = chain.shape
-            chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
-            ls = '-'
-        ntemps = chain.shape[1] if all_T else 1
-        tau = np.empty(shape=(len(Npoints), ntemps, chain.shape[-1]))
-
-        try:
-            for i, N in enumerate(Npoints):
-                tau[i] = get_integrated_act(chain[:N, :ntemps], average=True, **act_kwargs)
-
-            for temp in range(ntemps):
-                where_max = np.argmax(tau[:, temp], axis=-1)
-
-                to_plot =np.max(tau[:, temp], axis=-1)
-
-                plt.loglog(Npoints, to_plot, color=color, marker='o', ls=ls, label=key + fr' - $T_{temp}$')
-
-                toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
-        
-        except:
-            warnings.warn(f"Could not compute the auto-correlation times for the branch {key}.")
-    
-    plt.loglog(Npoints, Npoints / 50, label=r'$\tau = N/50$', linestyle='--', color='black')
-
-    plt.xlabel('Number of samples')
-    plt.ylabel(r'$\tau$')
-
-    plt.ylim(0, toplim)
-    plt.legend()
-
-    fig.savefig(path + 'act_evolution' + suffix, dpi=150)
-
 
 
 
@@ -962,6 +715,7 @@ class AutoCorrelationStopping(Stopping):
         self.ess = ess
         self.when_to_stop = np.inf
         self.transform_fn = transform_fn
+        self.use_to_stop = None
 
     def __call__(self, iter, last_sample, sampler):
         """
@@ -978,10 +732,25 @@ class AutoCorrelationStopping(Stopping):
         """
         samples = sampler.get_chain(discard=0, thin=1)
 
+
+
         if self.transform_fn is not None:
             samples = self.transform_fn(samples)
 
-        tau = get_integrated_act(samples)
+        tau = {}
+        for name in samples.keys():
+            chain = samples[name]
+            nsteps, ntemps, nw, nleaves, ndims = chain.shape
+            chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
+            tau[name] = get_integrated_act(chain, average=True)
+
+        #tau = get_integrated_act(samples)
+
+        use_to_stop = []
+        for name, values in tau.items():
+            if np.all(np.isfinite(values)):
+                use_to_stop.append(name)
+                
 
         if self.time > 0:
             iteration = sampler.iteration
@@ -995,6 +764,8 @@ class AutoCorrelationStopping(Stopping):
             finish = []
 
             for name, values in tau.items():
+                if name not in use_to_stop:
+                    continue
                 converged = np.all(tau[name] * self.autocorr_multiplier < iteration)
                 converged &= np.all(
                     np.abs(self.old_tau[name] - tau[name]) / tau[name] < 0.01
@@ -1051,3 +822,128 @@ class AutoCorrelationStopping(Stopping):
         """
         
         return int(np.ceil(self.ess * tau / nw))
+    
+
+class SamplesLoader():
+    def __init__(self, path, transform_fn=None):
+
+        backend_path = find_files(path, 'h5')[0] if os.path.isdir(path) else path
+        self.backend = backend_path
+        self.transform_fn = transform_fn
+
+    @property
+    def backend(self):
+        return self._backend
+    
+    @backend.setter
+    def backend(self, backend):
+        self._backend = HDFBackend(backend)
+
+    @property
+    def transform_fn(self):
+        return self._transform_fn
+
+    @transform_fn.setter
+    def transform_fn(self, transform_fn):
+        self._transform_fn = transform_fn
+
+
+    def load(self, ess=1e4, squeeze=False):
+        """
+        Load the samples from the backend.
+
+        Args:
+            ess (float): Effective sample size. Default is 1e4.
+            squeeze (bool): Whether to 'squeeze' the samples. Default is False.
+
+        Returns:
+            dict or array: Dictionary containing the samples for each branch or the samples for a single branch. if `squeeze` is True and there is only one branch, return a 2D array.
+        """
+
+        thin = int(general_act(self.backend, discard=0))
+        logl = self.backend.get_log_like()[:, 0, :]
+
+        nsteps, nw = logl.shape
+        print("Number of steps: ", nsteps)
+
+        ess = int(ess)
+        N_keep = int(np.ceil(ess * thin / nw))
+        print("Number of samples to keep: ", N_keep)
+        discard = max(5000, self.backend.iteration - N_keep)
+
+        samples = self.backend.get_chain(discard=discard, thin=thin)
+
+        samples_out = {}
+
+        logP = self.backend.get_log_posterior(discard=discard, thin=thin)[:, 0].flatten()
+        logL = self.backend.get_log_like(discard=discard, thin=thin)[:, 0].flatten()
+
+        samples_out['logP'] = logP
+        samples_out['logL'] = logL
+
+        branches = self.backend.branch_names
+        for branch in branches:
+            ndim = self.backend.ndims[branch]
+            samples_here = samples[branch]
+            if self.transform_fn is not None:
+                if not isinstance(self.transform_fn, dict):
+                    samples_here = self.transform_fn.both_transforms(samples_here)  
+                else:  
+                    samples_here = self.transform_fn[branch].both_transforms(samples_here)
+            
+            samples_here = samples_here[:, 0].reshape(-1, ndim) # take only the zero temperature chain
+            samples_out[branch] = samples_here
+        
+        if len(branches) == 1 and squeeze:
+            samples_out = samples_out[branch]
+        return samples_out
+    
+    def make_dataframe(self, labels=None, samples=None, ess=1e4):
+        """
+        Make a pandas DataFrame from the samples.
+
+        Args:
+            labels (dict): Dictionary containing the labels for each parameter in each branch.
+            samples (dict): Dictionary containing the samples for each branch. Default is None.
+            ess (float): Effective sample size. Default is 1e4.
+        
+        Returns:
+            dict: Dictionary containing the pandas DataFrame for each branch.
+        """
+
+        labels = self.labels if hasattr(self, 'labels') else labels
+        assert labels is not None, "Labels must be provided."
+
+        if samples is None:
+            samples = self.load(ess=ess)
+
+        if not isinstance(labels, dict):
+            labels = {'tmp': labels}
+
+        if not isinstance(samples, dict):
+            samples = {branch: samples for branch in labels.keys()}
+
+        dfs = {}
+        for branch, samples_here in samples.items():
+            df = pd.DataFrame(samples_here, columns=labels[branch])
+
+            if 'logP' in samples.keys():
+                df['log_posterior'] = samples['logP']
+            
+            if 'logL' in samples.keys():
+                df['log_likelihood'] = samples['logL']
+
+            dfs[branch] = df
+
+        return dfs if len(dfs) > 1 else dfs[branch]
+        
+
+        
+
+        
+
+            
+
+
+
+

@@ -351,157 +351,121 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(samples, labels, names='samples', weights=None, logP=None, truths=None, return_obj=False, colors=None, plot_walks=False, **kwargs):
+def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, fontsize=18, ticksize=14, offset=True, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
     """
-    Plot the samples using the ChainConsumer package. This function is a wrapper around the ChainConsumer.plot function.
-    The goal is to allow plotting multiple chains on the same canvas to compare different results.
+    Plot chains of samples using ChainConsumer library.
 
-    Arguments:
-    - samples (list or array-like): The samples to plot. Each element in the list should be a 
-                                    2D array with shape (n_samples, n_parameters). 
-                                    The arrays will be converted to pandas DataFrames by `pysco.plot.to_pandas` 
-                                    to be read by ChainConsumer.
-    - labels (list): The labels for the samples.
-    - names (list): The names of the chains.
-    - weights (array-like, optional): The weights for each sample. If None, uniform weights will be used.
-    - logP (array-like, optional): The log posterior values for each sample. If provided, the samples will be plotted as points.
-    - truths (dict, list or array-like, optional): The true values for the parameters. If None, no truths will be plotted.
-    - return_obj (bool, optional): If True, return the ChainConsumer object. If False, plot the results.
-    - colors (str or list, optional): The colors to use for the chains. If a string, it should be a key for `pysco.plot.get_colorslist`.
-                                      If a list, it should be a list of colors to use for each chain. If None, the default matplotlib 
-                                      color cycle will be used.
-    - plot_walks (bool, optional): If True, plot the walks of the chains in addition to the corner plot.
-    - kwargs: Additional keyword arguments to pass to ChainConsumer.plot.
+    Parameters:
+    - dfs (list or dict): List of pandas DataFrames or dictionary of pandas DataFrames containing the samples for each chain.
+    - names (list or str, optional): List of names for each chain. If not provided, names will be automatically assigned.
+    - columns (int or list, optional): Number of columns to include in the plot or list of column names to include. Default is None, which includes all columns.
+    - truths (array-like, optional): Array-like object containing the true values to be plotted as a reference line. Default is None.
+    - plot_dir (str, optional): Directory to save the plot. Default is './'.
+    - savename (str, optional): Name of the saved plot file. If not provided, the plot will be displayed instead of saved.
+    - fontsize (int, optional): Font size for the plot. Default is 18.
+    - ticksize (int, optional): Font size for the tick labels. Default is 14.
+    - offset (bool, optional): Whether to offset the chains vertically. Default is True.
+    - chain_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.Chain constructor.
+    - chainconfig_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.ChainConfig constructor.
+    - legend_kwargs (dict, optional): Additional keyword arguments to be passed to the legend configuration.
+    - plotconfig_kwargs (dict, optional): Additional keyword arguments to be passed to the plot configuration.
 
     Returns:
-    - If return_obj is False, the function plots the results and returns the figure object(s).
-    - If return_obj is True, the function returns the figure object(s) and the ChainConsumer object.
+    - C (ChainConsumer): The ChainConsumer object containing the chains.
+    - fig (matplotlib.figure.Figure): The matplotlib figure object.
 
-    Note:
-    - This function requires the ChainConsumer package to be installed.
-    - The samples will be converted to pandas DataFrames using `pysco.plot.to_pandas` before being passed to ChainConsumer.
-    - The ChainConsumer object is used to create the corner plot and, if plot_walks is True, the walks plot.
-    - The corner plot shows the parameter distributions and correlations between parameters.
-    - The walks plot shows the evolution of the chains over iterations.
-
-    Example usage:
-    ```python
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from pysco.plot import chainplot
-
-    # Generate some random samples
-    n_samples = 1000
-    n_parameters = 3
-    samples = [np.random.randn(n_samples, n_parameters) for _ in range(3)]
-    labels = ['Param 1', 'Param 2', 'Param 3']
-    names = ['Chain 1', 'Chain 2', 'Chain 3']
-
-    # Plot the samples
-    chainplot(samples, labels, names, plot_walks=True)
-    plt.show()
-    ```
     """
-    assert chain_here, 'ChainConsumer not found. chainplot will not work.'
-    # Create a ChainConsumer object
-    c = chainconsumer.ChainConsumer()
 
-    # Check if samples is a list, if not convert it to a list with a single element
-    if not isinstance(samples, list):
-        samples = [samples]
-        names = [names]
-    # Check if colors is provided and is a list
-    if isinstance(colors, list):
-        assert len(colors) == len(samples), 'Provide a color for each chain'
+    lss = ["-", "--", "-.", ":"]
+    colors = get_colorslist(colors='colors6') #TODO add flexibility for colors
 
-    # Check if colors is provided and is a string, if so get the colors from the color list
-    elif isinstance(colors, str):
-        try:
-            colors = get_colorslist(colors)
-        except:
-            colors = [colors]
-
-    # If colors is not provided, use the default matplotlib color cycle
-    else:
-        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-
-    for sample, name, color in zip(samples, names, colors):
-        # Convert the sample to a pandas DataFrame
-        plot_point = False
-        df = to_pandas(sample, labels)
-
-        if logP is not None:
-            df['log_posterior'] = logP
-            plot_point = True
+    if not isinstance(dfs, list):
+        
+        if isinstance(dfs, dict):
+            names = list(dfs.keys())
+            dfs = list(dfs.values())
         else:
-            plot_point = False
+            names = [names]
+            dfs = [dfs]
+        
+    n_chains = len(dfs)
 
-        if weights is None:
-            weights = np.ones(shape=sample.shape[0])
-            
-        df['weight'] = weights
-    
-        chain = chainconsumer.Chain(samples=df, name=name, color=color, plot_point=plot_point, marker_style="*", marker_size=100, **kwargs)
-        c.add_chain(chain)
-    
+    C = chainconsumer.ChainConsumer()
+
+    for i, name, df in zip(range(n_chains), names, dfs):
+
+        if columns is None:
+            columns_here = df.columns
+        elif isinstance(columns, int):
+            columns_here = df.columns[:columns]
+        elif isinstance(columns, list):
+            if isinstance(columns[0], list):
+                # different columns for each chain
+                columns_here = columns[i]
+            else:
+                # same columns for all chains
+                columns_here = columns
+        else:
+            raise ValueError("columns must be None, int or list")
+
+
+        chain = chainconsumer.Chain(samples=df[columns_here], name=name, linewidth=2.0, color=colors[i], linestyle=lss[i], **chain_kwargs)
+        C.add_chain(chain)
 
     if truths is not None:
-        # Check if truths is a dictionary, if not convert it to a dictionary using labels as keys
-        if not isinstance(truths, dict):
-            truths = dict(zip(labels, truths))
+        C.add_truth(chainconsumer.Truth(location=truths, color='k', line_style="-", name="Injection"))
+    #c.add_marker(location=df_truths[plotting_columns[:-1]], color='k', marker_style='x', marker_size=20, name="Injection")
 
-        # Add the truth values
-        c.add_truth(chainconsumer.Truth(location=truths, color='k'))
-        # c.add_marker(location=truths, name="Truth", color="k", marker_style="x", marker_size=30)
-    
-    c.set_override(chainconsumer.ChainConfig(
-        sigmas=[0, 1, 2],
-        shade_gradient=1,
-        shade_alpha=0.5,
-        statistics='cumulative',
-        summary_area=0.90,
-    )
-    )
-    # Plot the results
-    c.set_plot_config(
-                chainconsumer.PlotConfig(
-                    summarise=True,
-                    tick_font_size=12,
-                    label_font_size=plt.rcParams['font.size'],
-                    summary_font_size=plt.rcParams['font.size'],
-                    contour_label_font_size=plt.rcParams['font.size'],
-                    spacing=3.0,
-                    usetex=True,
-                    serif=True,
-                    dpi=plt.rcParams['savefig.dpi'],
-                    )   
-                    )
-    
-    plotter_kwargs = {
-        #'chains': [name],
-        'columns': labels,
-        'figsize': plt.rcParams['figure.figsize'],
+    default_chain_kwargs = {
+        "sigmas":[0, 1, 2],
+        "shade_gradient": 1,
+        "shade_alpha": 0.5,
+        "statistics": "cumulative",
+        "summary_area": 0.90,
     }
 
-    if 'filename' in kwargs:
-        plotter_kwargs['filename'] = kwargs['filename'] + '_cornerplot'
+    chainconfig_kwargs = default_chain_kwargs | chainconfig_kwargs
 
-    fig = c.plotter.plot(**plotter_kwargs)
-
-    out = (fig,)
-
-    if plot_walks:
-        plotter_kwargs['filename'] = kwargs['filename'] + '_walks'
-        plotter_kwargs['figsize'] = (20, 20)
-        plotter_kwargs['plot_weights'] = kwargs['plot_weights'] if 'plot_weights' in kwargs.keys() else False
-        plotter_kwargs['plot_posterior'] = kwargs['plot_posterior'] if 'plot_posterior' in kwargs.keys() else False
-        plotter_kwargs['convolve'] = kwargs['convolve'] if 'convolve' in kwargs.keys() else 100
-
-        fig_walks = c.plotter.plot_walks(**plotter_kwargs)
-        
-        out += (fig_walks,)
+    default_legend_kwargs = {
+        "labelspacing": 0.8,
+        "loc": "center left",
+        "frameon": True,
+        "fontsize": fontsize,
+        "handlelength": 1.5,
+        "handletextpad": 0.5,
+        "borderaxespad": 0.0,
+        }
     
-    if return_obj:
-        out += (c,)
+    legend_kwargs = default_legend_kwargs | legend_kwargs
+    
+    default_plot_kwargs = {
+        "summarise": True,
+        "tick_font_size": ticksize,
+        "label_font_size": fontsize,
+        "summary_font_size": fontsize,
+        "contour_label_font_size": fontsize,
+        "diagonal_tick_labels": True,
+        "spacing":None,
+        "usetex": True,
+        "serif": True,
+        "dpi": 300,
+        "legend_kwargs": legend_kwargs,
+        "legend_color_text": False,
+        "show_legend": True,
+    }
 
-    return out
+    plotconfig_kwargs = default_plot_kwargs | plotconfig_kwargs
+
+    C.set_override(chainconsumer.ChainConfig(**chainconfig_kwargs))
+    C.set_plot_config(chainconsumer.PlotConfig(**plotconfig_kwargs))
+
+    fig = C.plotter.plot(offset=offset)
+
+    #plt.tight_layout()
+    if savename is not None:
+        plt.savefig(plot_dir + savename + '.pdf', bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+    return C, fig
