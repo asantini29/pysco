@@ -3,8 +3,8 @@ import numpy as np
 from eryn.backends import HDFBackend
 from eryn.utils import TransformContainer
 
-from .eryn import SamplesLoader
-from .utils import find_files
+from ..eryn import SamplesLoader
+from ..utils import find_files
 
 
 emri_standard_parameter_transforms = {

@@ -16,14 +16,14 @@ from .pysco import __author_email__
 
 from .pysco import *
 
-import pysco.performance, pysco.plot, pysco.utils
+import pysco.plot, pysco.utils
 
 try:
     import pysco.eryn
-    import pysco.lisautils
+    import pysco.lisautils.emris
 
     eryn_here = True
 
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     eryn_here = False
     log.warning("Eryn not found. Some features will be disabled.")
