@@ -22,6 +22,8 @@ Some of the main routines currently implemented in `pysco` :
    ```
    The module contains three different colorblind-friendly color palettes based on the results of [arXiv:2107.02270](https://arxiv.org/abs/2107.02270).
    
-3. **performance**: `pysco.performance` contains basic timing and benchmarking operations.
+3. **utils**: `pysco.performance` contains basic timing and benchmarking operations.
 
 4. **eryn**: the module `pysco.eryn` contains useful routines for the [Eryn](https://github.com/mikekatz04/Eryn) MCMC sampler. Most of the snippets currently implemented are tailored for a diagnostic plots-oriented `update_fn`.
+
+5. **lisautils**: This module contains common samples-related operations for LISA data analysis.
