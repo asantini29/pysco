@@ -27,3 +27,24 @@ Some of the main routines currently implemented in `pysco` :
 4. **eryn**: the module `pysco.eryn` contains useful routines for the [Eryn](https://github.com/mikekatz04/Eryn) MCMC sampler. Most of the snippets currently implemented are tailored for a diagnostic plots-oriented `update_fn`.
 
 5. **lisautils**: This module contains common samples-related operations for LISA data analysis.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE) file for details.
+
+## Citing
+
+If you use `pysco` in your research, you can cite it in the following way:
+
+```
+@software{pysco_2024_13919394,
+  author       = {Alessandro Santini},
+  title        = {asantini29/pysco: First release},
+  month        = oct,
+  year         = 2024,
+  publisher    = {Zenodo},
+  version      = {v0.0.1},
+  doi          = {10.5281/zenodo.13930440},
+  url          = {https://doi.org/10.5281/zenodo.13930440}
+}
+```
