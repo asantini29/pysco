@@ -37,7 +37,7 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE) f
 If you use `pysco` in your research, you can cite it in the following way:
 
 ```
-@software{pysco_2024_13919394,
+@software{pysco_2024_13930440,
   author       = {Alessandro Santini},
   title        = {asantini29/pysco: First release},
   month        = oct,
