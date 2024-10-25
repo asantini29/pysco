@@ -78,7 +78,7 @@ def default_plotting(backcolor='white', frontcolor='black'):
         'font.weight':'medium',
         'mathtext.fontset': 'cm',
         'text.latex.preamble': r"\usepackage{amsmath}",
-        'font.size': 14,
+        'font.size': 16,
         'figure.figsize': (7, 7),
         'figure.titlesize': 'large',
         'axes.formatter.use_mathtext': True,
@@ -351,7 +351,7 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, fontsize=18, ticksize=14, offset=True, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
+def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, fontsize=18, ticksize=14, ls=None, offset=True, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
     """
     Plot chains of samples using ChainConsumer library.
 
@@ -364,6 +364,7 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     - savename (str, optional): Name of the saved plot file. If not provided, the plot will be displayed instead of saved.
     - fontsize (int, optional): Font size for the plot. Default is 18.
     - ticksize (int, optional): Font size for the tick labels. Default is 14.
+    - ls (str, optional): Line style for the chains. Default is None. If not provided, the line style will be automatically assigned to be different for each dataframe.
     - offset (bool, optional): Whether to offset the chains vertically. Default is True.
     - chain_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.Chain constructor.
     - chainconfig_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.ChainConfig constructor.
@@ -376,9 +377,6 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
 
     """
 
-    lss = ["-", "--", "-.", ":"]
-    colors = get_colorslist(colors='colors6') #TODO add flexibility for colors
-
     if not isinstance(dfs, list):
         
         if isinstance(dfs, dict):
@@ -389,6 +387,24 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
             dfs = [dfs]
         
     n_chains = len(dfs)
+
+    lss = ["-", "--", "-.", ":"] if ls is None else [ls] * n_chains
+    my_colorlists = ['colors6', 'colors8', 'colors10']
+    colorstring = 'colors6'
+    colors = get_colorslist(colors=colorstring) #TODO add flexibility for colors
+
+    while n_chains > len(colors):
+        #locate
+        idx_now = my_colorlists.index(colorstring)
+        if idx_now < len(my_colorlists) + 1:
+            colorstring = my_colorlists[idx_now + 1]
+            colors = get_colorslist(colors=colorstring)
+        else:
+            #restore default matplotlib color cycle
+            colors = get_colors_from_cmap(n_chains, cmap='gist_rainbow')
+    while n_chains > len(lss):
+        lss = lss + lss
+
 
     C = chainconsumer.ChainConsumer()
 
@@ -460,12 +476,29 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     C.set_plot_config(chainconsumer.PlotConfig(**plotconfig_kwargs))
 
     fig = C.plotter.plot(offset=offset)
+    axes = fig.get_axes()
+    for ax in axes:
+        x_range = ax.get_xlim()
+        y_range = ax.get_ylim()
+
+        # If the axis range is very small (e.g., close to 1e-15), use scientific notation
+        if abs(x_range[1] - x_range[0]) < 1e-3 or abs(y_range[1] - y_range[0]) < 1e-3:
+            ax.ticklabel_format(style='scientific', axis='both', scilimits=(-3, 3))
+        else:
+            ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+            ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+
+        # Set the label coordinates for consistent alignment
+        ax.xaxis.set_label_coords(0.5, -0.32)  # Adjust x-label position (relative to axis)
+        ax.yaxis.set_label_coords(-0.32, 0.5)  # Adjust y-label position (relative to axis)
+
+
 
     #plt.tight_layout()
     if savename is not None:
         plt.savefig(plot_dir + savename + '.pdf', bbox_inches='tight')
         plt.close()
-    else:
-        plt.show()
+    # else:
+    #     plt.show()
 
     return C, fig

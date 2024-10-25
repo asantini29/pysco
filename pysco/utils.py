@@ -4,6 +4,25 @@ import warnings
 import time
 from datetime import timedelta
 from functools import wraps
+import GPUtil
+
+def get_free_gpus(n_gpus=1):
+    '''
+    Get the IDs of free GPUs (with load less than 1% and memory less than 1%).
+
+    Parameters
+    ----------
+    n_gpus : int
+        Number of free GPUs to return.
+    
+    Returns
+    -------
+    free_gpus : list
+        List of IDs of free GPUs.
+    '''
+
+    free_gpus = GPUtil.getAvailable(order='first', limit=n_gpus, maxLoad=0.01, maxMemory=0.01)
+    return free_gpus
 
 def find_files(dir, extension):
     '''

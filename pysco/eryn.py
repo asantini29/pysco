@@ -129,13 +129,15 @@ class DiagnosticPlotter:
     - plot_leaves_hist(): Plot the histogram of the number of leaves for each temperature.
     """
 
-    def __init__(self, sampler, path, truths, labels, transform_all=None, true_logl=None, discard=0.3, suffix='', converter=None) -> None:
+    def __init__(self, sampler, path, truths, labels, plot_kwargs={}, plot_all_temps=False, transform_all=None, true_logl=None, discard=0.3, suffix='', converter=None) -> None:
         self.sampler = sampler
         self.path = path
         self.truths = truths
         self.labels = labels
         self.transform_all = transform_all
         self.discard = discard
+        self.plot_kwargs = plot_kwargs
+        self.plot_all_temps = plot_all_temps
         self.true_logl = true_logl
         self.suffix = suffix
         self.converter = converter
@@ -160,6 +162,8 @@ class DiagnosticPlotter:
             self.sampler = sampler
             self.nw = sampler.nwalkers
             self.nt = sampler.ntemps
+
+            self.temperaturestoplot = np.arange(self.nt, dtype=np.int32) if self.plot_all_temps else [0]   
             self.nleaves_max = sampler.nleaves_max
 
             if hasattr(sampler, 'nleaves_min'):
@@ -170,6 +174,8 @@ class DiagnosticPlotter:
             self.rj_branches = [key for key in sampler.branch_names if self.nleaves_min[key] != self.nleaves_max[key]]
 
             self.has_rj = len(self.rj_branches) > 0
+            print('All branches:', sampler.branch_names)
+            print('Branches with RJ:', self.rj_branches)
 
             self.tempcolors = pysco.plot.get_colors_from_cmap(self.nt, cmap='inferno', reverse=False)
 
@@ -228,8 +234,9 @@ class DiagnosticPlotter:
         samples = self.sampler.get_chain(discard=int(self.discard * iteration), thin=1)
         logl = self.sampler.get_log_like(discard=int(self.discard * iteration), thin=1)
 
+        all_kwargs = {**self.plot_kwargs, **kwargs}
         # Plot the corner and trace plots
-        self.plot_corners(samples, logl[:, 0].flatten(), **kwargs)
+        self.plot_corners(samples, logl[:, 0].flatten(), **all_kwargs)
 
         # Plot the acceptance fraction evolution
         self.plot_acceptance()
@@ -244,10 +251,11 @@ class DiagnosticPlotter:
         # Plot the log likelihood evolution
         self.plot_logl_evolution(logl)
 
+
         if return_samples:
             return samples, logl
 
-    def plot_corners(self, samples, logl, trace=True, **kwargs):
+    def plot_corners(self, samples, logl, trace=True, covs=True, **kwargs):
         """
         Plot corner plots and trace plots for the given samples.
 
@@ -255,6 +263,7 @@ class DiagnosticPlotter:
             samples (dict): A dictionary containing the samples for each branch.
             logl (array-like): The log likelihood values.
             trace (bool, optional): Whether to plot trace plots. Defaults to True.
+            covs (bool, optional): Whether to plot the diagonal elements of the covariance matrix of the samples. Defaults to True.
             **kwargs: Additional keyword arguments to be passed to the corner plot function.
 
         Returns:
@@ -272,101 +281,133 @@ class DiagnosticPlotter:
             else:
                 samples_here = samples[key]
 
-            chain = get_clean_chain(samples_here, ndim=ndims)
-
+            nsteps = samples_here.shape[0]
             truths_here = self.truths[key]
             labels_here = self.labels[key]
 
-            if self.nleaves_min[key] == self.nleaves_max[key] == 1:
-                truths_here = np.append(truths_here, self.true_logl)
-                labels_here = np.append(labels_here, r'$\log{\mathcal{L}}$')
+            for temp in self.temperaturestoplot:
+                chain = get_clean_chain(samples_here, ndim=ndims, temp=temp)
 
-                chain = np.column_stack((chain, logl))
+                if self.nleaves_min[key] == self.nleaves_max[key] == 1:
+                    truths_here = np.append(truths_here, self.true_logl)
+                    labels_here = np.append(labels_here, r'$\log{\mathcal{L}}$')
 
-            fig = pysco.plot.corner(chain,
-                                    truths=truths_here,
-                                    labels=labels_here,
-                                    save=False,
-                                    custom_whspace=0.15,
-                                    filename=self.path + key + '_cornerplot' + self.suffix,
-                                    dpi=150,
-                                    linestyle='-',
-                                    **kwargs
-                                    )
-            
-            if self.mixture_here:
-                ndim = chain.shape[-1]
-                dpgmm = dgpmm_dict[key]
-                covs = dpgmm.covariances_
-                means = dpgmm.means_
+                    chain = np.column_stack((chain, logl))
+                    logl_here = True
 
-                # Plot the ellipses
-                if dpgmm.n_components > 1:
-                    for i in range(dpgmm.n_components):
-                        cov = covs[i]
-                        mean = means[i]
-                        v, w = np.linalg.eigh(cov)
-                        v = 2. * np.sqrt(2.) * np.sqrt(v)
-
-                        for j in range(cov.shape[0] // 2):
-                            j = 2*j
-                            u = w[j] / np.linalg.norm(w[j])
-                            angle = np.arctan(u[j+1] / u[j])
-                            angle = 180. * angle / np.pi
-
-                            ell = mpl.patches.Ellipse(xy=mean, width=v[j], height=v[j+1], angle=180. + angle, color='k', facecolor='none', alpha=0.5)
-                            fig.axes[ndim].add_patch(ell)
-                            fig.axes[ndim].plot(mean[0], mean[1], 'x', color='k', alpha=0.5)
-
-            fig.savefig(self.path + key + '_cornerplot' + self.suffix, dpi=150)
-
-            plt.close()
-
-            if trace:
-                fig, axs = plt.subplots(self.sampler.ndims[key], 1, sharex=True)
-                fig.set_size_inches(20, 20)
-
-                for i in range(ndims):
-                    for walk in range(self.nw):
-                        axs[i].plot(samples_here[:, 0, walk, :, i], ls='-', alpha=0.7, lw=1)
-
-                    axs[i].set_ylabel(self.labels[key][i])
-
-                    if truths_here[i] is not None:
-                        axs[i].axhline(truths_here[i], color='k', ls='--', lw=2)
-
-                fig.savefig(self.path + key + '_traceplot' + self.suffix, dpi=150)
-                plt.close()
-
-        if self.converter is not None:
-            new_samples = get_numpy(self.converter(samples)[0])
-            #todo look at the shape of the samples
-            nsteps, ntemps, nw = new_samples.shape[:3]
-            new_samples = new_samples.reshape(nsteps, ntemps, nw, -1)
-            new_samples_flat = new_samples[:, 0].reshape(nsteps * nw, -1)
-            fig = pysco.plot.corner(new_samples_flat,
-                                    # truths=truths_here,
-                                    # labels=labels_here,
-                                    save=True,
-                                    custom_whspace=0.15,
-                                    filename=self.path + 'converter_cornerplot' + self.suffix,
-                                    dpi=150,
-                                    linestyle='-',
-                                    **kwargs
-                                    )
-
-            fig, axs = plt.subplots(new_samples.shape[-1], 1, sharex=True)
-            fig.set_size_inches(20, 20)
-
-            for i in range(new_samples.shape[-1]):
-                for walk in range(nw):
-                    axs[i].plot(new_samples[:, 0, walk, i], ls='-', alpha=0.7, lw=1)
-
-                axs[i].set_ylabel('Parameter ' + str(i))
+                try:
+                    fig = pysco.plot.corner(chain,
+                                            truths=truths_here,
+                                            labels=labels_here,
+                                            save=False,
+                                            custom_whspace=0.15,
+                                            filename=self.path + key + '_cornerplot' + self.suffix,
+                                            dpi=150,
+                                            linestyle='-',
+                                            **kwargs
+                                            )
+                except:
+                    print('Could not plot the corner plot for branch', key)
+                    continue
 
                 
-            fig.savefig(self.path + 'converter_traceplot' + self.suffix, dpi=150)
-            plt.close()
+                if self.mixture_here:
+                    ndim = chain.shape[-1]
+                    dpgmm = dgpmm_dict[key]
+                    covs = dpgmm.covariances_
+                    means = dpgmm.means_
+
+                    # Plot the ellipses
+                    if dpgmm.n_components > 1:
+                        for i in range(dpgmm.n_components):
+                            cov = covs[i]
+                            mean = means[i]
+                            v, w = np.linalg.eigh(cov)
+                            v = 2. * np.sqrt(2.) * np.sqrt(v)
+
+                            for j in range(cov.shape[0] // 2):
+                                j = 2*j
+                                u = w[j] / np.linalg.norm(w[j])
+                                angle = np.arctan(u[j+1] / u[j])
+                                angle = 180. * angle / np.pi
+
+                                ell = mpl.patches.Ellipse(xy=mean, width=v[j], height=v[j+1], angle=180. + angle, color='k', facecolor='none', alpha=0.5)
+                                fig.axes[ndim].add_patch(ell)
+                                fig.axes[ndim].plot(mean[0], mean[1], 'x', color='k', alpha=0.5)
+
+                fig.savefig(self.path + key + '_cornerplot_T%.i' % temp  + self.suffix, dpi=150)
+
+                plt.close()
+
+                if trace:
+                    fig, axs = plt.subplots(self.sampler.ndims[key], 1, sharex=True)
+                    fig.set_size_inches(20, 20)
+
+                    for i in range(ndims):
+                        for walk in range(self.nw):
+                            axs[i].plot(samples_here[:, temp, walk, :, i], ls='-', alpha=0.7, lw=1)
+
+                        axs[i].set_ylabel(self.labels[key][i])
+
+                        if truths_here[i] is not None:
+                            axs[i].axhline(truths_here[i], color='k', ls='--', lw=2)
+
+                    fig.savefig(self.path + key + '_traceplot_T%.i' % temp + self.suffix, dpi=150)
+                    plt.close()
+                
+                if covs:
+                    steps = np.arange(100, nsteps, 100, dtype=int)
+                    colors = pysco.plot.get_colorslist(colors='colors6')
+
+                    fig, axs = plt.subplots(ndims, 1, figsize=(20, 5*ndims), sharex=True)
+
+                    for n in steps:
+                        cov = np.cov(np.squeeze(samples_here)[n, temp].T) 
+                        for i in range(ndims):
+                            axs[i].plot(n, np.sqrt(cov[i, i]), marker='x', color=colors[temp])
+                    
+                    for i in range(ndims):
+                        axs[i].set_ylabel(labels_here[i])
+        
+
+                    plt.xlabel('Number of steps')
+                    plt.savefig(self.path + key + '_covariance_T%.i' % temp + self.suffix, dpi=150)
+                    plt.close()
+
+        if self.converter is not None:
+            try:
+                new_samples = get_numpy(self.converter(samples)[0])
+                #todo look at the shape of the samples
+                nsteps, ntemps, nw = new_samples.shape[:3]
+                new_samples = new_samples.reshape(nsteps, ntemps, nw, -1)
+                new_samples_flat = new_samples[:, 0].reshape(nsteps * nw, -1)
+                fig = pysco.plot.corner(new_samples_flat,
+                                        # truths=truths_here,
+                                        # labels=labels_here,
+                                        save=True,
+                                        custom_whspace=0.15,
+                                        filename=self.path + 'converter_cornerplot' + self.suffix,
+                                        dpi=150,
+                                        linestyle='-',
+                                        **kwargs
+                                        )
+                plt.close()
+                
+                fig, axs = plt.subplots(new_samples.shape[-1], 1, sharex=True)
+                fig.set_size_inches(20, 20)
+
+                for i in range(new_samples.shape[-1]):
+                    for walk in range(nw):
+                        axs[i].plot(new_samples[:, 0, walk, i], ls='-', alpha=0.7, lw=1)
+
+                    axs[i].set_ylabel('Parameter ' + str(i))
+
+                    
+                fig.savefig(self.path + 'converter_traceplot' + self.suffix, dpi=150)
+                plt.close()
+            except:
+                print('Could not plot the converter corner plot.')
+                pass
 
     def plot_acceptance(self):
         """
@@ -567,8 +608,6 @@ class DiagnosticPlotter:
         fig.savefig(self.path + 'loglike_evolution' + self.suffix, dpi=150)
 
         plt.close()
-
-
 
 def general_act(sampler, discard=None, all_T=False, return_max=True, act_kwargs={}):
     """
@@ -775,8 +814,18 @@ class AutoCorrelationStopping(Stopping):
 
             if np.all(finish):
                 stop = True
+                # values = list(tau.values())
+                # values = values[np.isfinite(values)]
+                
+                taus_all = []
 
-                tau_max = np.max([np.max(tau[name]) for name in tau.keys()])
+                for name in tau.keys():
+                    tau_here = np.max(tau[name])
+                    if np.isfinite(tau_here):
+                        taus_all.append(tau_here)
+                
+                tau_max = np.max(taus_all)
+
                 if self.ess is not None:
                     nw = last_sample.log_like.shape[1]
                     self.N = self.get_N_from_ess(nw, tau_max)           
@@ -857,19 +906,18 @@ class SamplesLoader():
             squeeze (bool): Whether to 'squeeze' the samples. Default is False.
 
         Returns:
-            dict or array: Dictionary containing the samples for each branch or the samples for a single branch. if `squeeze` is True and there is only one branch, return a 2D array.
+            if squeeze == True and there is only one branch:
+                samples_out (array): 2D array containing the samples of the single branch.
+                logL (array): 1D array containing the log likelihood.
+                logP (array): 1D array containing the log posterior
+            else:
+                samples_out (dict): Dictionary containing the samples for each branch, the log likelihood and the log posterior.
+            
         """
-
-        thin = int(general_act(self.backend, discard=0))
-        logl = self.backend.get_log_like()[:, 0, :]
-
-        nsteps, nw = logl.shape
-        print("Number of steps: ", nsteps)
-
-        ess = int(ess)
-        N_keep = int(np.ceil(ess * thin / nw))
-        print("Number of samples to keep: ", N_keep)
-        discard = max(5000, self.backend.iteration - N_keep)
+        if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
+            self.compute_discard_thin(ess=ess)
+        
+        discard, thin = self.discard, self.thin
 
         samples = self.backend.get_chain(discard=discard, thin=thin)
 
@@ -895,8 +943,55 @@ class SamplesLoader():
             samples_out[branch] = samples_here
         
         if len(branches) == 1 and squeeze:
-            samples_out = samples_out[branch]
-        return samples_out
+            return samples_out[branch], logL, logP
+        else:
+            return samples_out
+        
+    def get_leaves(self, ess=1e4):
+        """
+        Get the number of leaves for each temperature.
+
+        Returns:
+            dict: Dictionary containing the number of leaves for each temperature.
+        """
+        if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
+            self.compute_discard_thin(ess=ess)
+        
+        discard, thin = self.discard, self.thin
+        return self.backend.get_nleaves(discard=discard, thin=thin)
+    
+    @pysco.utils.timeit
+    def compute_discard_thin(self, ess=1e4):
+        """
+        Compute the number of samples to discard and thin.
+
+        Args:
+            ess (float): Effective sample size. Default is 1e4.
+        Returns:    
+            None
+        """
+        samples = self.backend.get_chain()
+        tau = {}
+        for name in samples.keys():
+            chain = samples[name]
+            nsteps, ntemps, nw, nleaves, ndims = chain.shape
+            chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
+            tau[name] = get_integrated_act(chain, average=True)
+        
+        taus_all = []
+
+        for name in tau.keys():
+            tau_here = np.max(tau[name])
+            if np.isfinite(tau_here):
+                taus_all.append(tau_here)
+        
+        self.thin = int(np.max(taus_all))
+        print("Number of steps: ", nsteps)
+
+        ess = int(ess)
+        N_keep = int(np.ceil(ess * self.thin / nw))
+        print("Number of samples to keep: ", N_keep)
+        self.discard = max(5000, self.backend.iteration - N_keep)
     
     def make_dataframe(self, labels=None, samples=None, ess=1e4):
         """
@@ -925,6 +1020,9 @@ class SamplesLoader():
 
         dfs = {}
         for branch, samples_here in samples.items():
+            if branch in ['logP', 'logL']:
+                continue
+
             df = pd.DataFrame(samples_here, columns=labels[branch])
 
             if 'logP' in samples.keys():
