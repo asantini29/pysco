@@ -124,6 +124,7 @@ def default_plotting(backcolor='white', frontcolor='black'):
     default_rcParams['figure.facecolor'] = backcolor
     default_rcParams['legend.facecolor'] = backcolor
     #default_rcParams['legend.edgecolor'] = frontcolor
+    default_rcParams['axes.titlecolor'] = frontcolor
     default_rcParams['legend.labelcolor'] = frontcolor
     default_rcParams['grid.color'] = frontcolor
     default_rcParams['lines.color'] = frontcolor
