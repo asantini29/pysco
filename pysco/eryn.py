@@ -9,7 +9,7 @@ from .utils import find_files
 
 import warnings
 
-from eryn.utils import get_integrated_act, psrf, Stopping
+from eryn.utils import get_integrated_act, psrf, Stopping, SearchConvergeStopping
 from eryn.backends import HDFBackend
 from eryn import moves
 
@@ -733,7 +733,7 @@ class GelmanRubinStopping(Stopping):
 
 class AutoCorrelationStopping(Stopping):
     
-    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, ess=None, transform_fn=None):
+    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, ess=None, transform_fn=None, n_iters=30, diff=0.1, start_iteration=0):
         """
         Stopping criterion based on the auto-correlation time.
 
@@ -745,7 +745,6 @@ class AutoCorrelationStopping(Stopping):
             ess (float): Effective sample size. Default is None.
             transform_fn (callable): Function to transform the chains before computing the diagnostic. Default is None.
         """
-
         self.autocorr_multiplier = autocorr_multiplier
         self.verbose = verbose
         self.time = 0
@@ -754,7 +753,15 @@ class AutoCorrelationStopping(Stopping):
         self.ess = ess
         self.when_to_stop = np.inf
         self.transform_fn = transform_fn
-        self.use_to_stop = None
+
+        #likelihood checks. Adapted from the SearchConvergenceStopping criterion
+        self.n_iters = n_iters
+        self.diff = diff
+        self.start_iteration = start_iteration
+
+        self.iters_consecutive = 0
+        self.past_like_best = -np.inf
+        
 
     def __call__(self, iter, last_sample, sampler):
         """
@@ -769,9 +776,23 @@ class AutoCorrelationStopping(Stopping):
             bool: ``True`` if the stopping criterion is met, ``False`` otherwise. 
 
         """
+
+        # get best Likelihood so far
+        like_best = sampler.get_log_like(discard=self.start_iteration).max()
+
+        # compare to last
+        # if it is less than diff change it passes
+        if np.abs(like_best - self.past_like_best) < self.diff:
+            self.iters_consecutive += 1
+
+        else:
+            # if it fails reset iters consecutive
+            self.iters_consecutive = 0
+
+            # store new best
+            self.past_like_best = like_best
+
         samples = sampler.get_chain(discard=0, thin=1)
-
-
 
         if self.transform_fn is not None:
             samples = self.transform_fn(samples)
@@ -812,10 +833,11 @@ class AutoCorrelationStopping(Stopping):
 
                 finish.append(converged)
 
-            if np.all(finish):
+            if np.all(finish) and (self.iters_consecutive >= self.n_iters):
+                # if we have passes the number of iters necessary, return True and reset
+                self.iters_consecutive = 0
+
                 stop = True
-                # values = list(tau.values())
-                # values = values[np.isfinite(values)]
                 
                 taus_all = []
 
