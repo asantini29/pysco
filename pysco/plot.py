@@ -62,7 +62,7 @@ def check_latex():
          mpl.rcParams['text.usetex']=False
          return
 
-def default_plotting(backcolor='white', frontcolor='black'):
+def default_plotting(style='light', backcolor=None, frontcolor=None):
     """
     Set the default plotting parameters for matplotlib.
 
@@ -77,30 +77,30 @@ def default_plotting(backcolor='white', frontcolor='black'):
         'font.weight':'medium',
         'mathtext.fontset': 'cm',
         'text.latex.preamble': r"\usepackage{amsmath}",
-        'font.size': 16,
+        'font.size': 20,
         'figure.figsize': (7, 7),
-        'figure.titlesize': 'large',
+        'figure.titlesize': 22,
         'axes.formatter.use_mathtext': True,
         'axes.formatter.limits': [-2, 4],
-        'axes.titlesize': 'large',
-        'axes.labelsize': 'large',
+        'axes.titlesize': 22,
+        'axes.labelsize': 22,
         'xtick.top': True,
         'xtick.major.size': 5,
         'xtick.minor.size': 3,
         'xtick.major.width': 0.8,
         'xtick.minor.visible': True,
         'xtick.direction': 'in',
-        'xtick.labelsize': 'medium',
+        'xtick.labelsize': 20,
         'ytick.right': True,
         'ytick.major.size': 5,
         'ytick.minor.size': 3,
         'ytick.major.width': 0.8,
         'ytick.minor.visible': True,
         'ytick.direction': 'in',
-        'ytick.labelsize': 'medium',
+        'ytick.labelsize': 20,
         'legend.frameon': True,
         'legend.framealpha': 1,
-        'legend.fontsize': 'medium',
+        'legend.fontsize': 20,
         'legend.scatterpoints' : 3,
         #'lines.color': 'k',
         'lines.linewidth': 2,
@@ -112,26 +112,41 @@ def default_plotting(backcolor='white', frontcolor='black'):
         'savefig.bbox' : 'tight',
         'savefig.transparent' : True,
     }
-    
-    # adjust colors
-    default_rcParams['text.color'] = frontcolor
-    default_rcParams['axes.labelcolor'] = frontcolor
-    default_rcParams['axes.edgecolor'] = frontcolor
-    default_rcParams['xtick.color'] = frontcolor
-    default_rcParams['ytick.color'] = frontcolor
-    default_rcParams['axes.facecolor'] = backcolor
-    default_rcParams['figure.facecolor'] = backcolor
-    default_rcParams['legend.facecolor'] = backcolor
-    #default_rcParams['legend.edgecolor'] = frontcolor
-    default_rcParams['axes.titlecolor'] = frontcolor
-    default_rcParams['legend.labelcolor'] = frontcolor
-    default_rcParams['grid.color'] = frontcolor
-    default_rcParams['lines.color'] = frontcolor
 
     plt.rcParams.update(default_rcParams)
 
+    if style == 'light':
+        set_colors(backcolor='white', frontcolor='black')
+    elif style == 'dark':
+        set_colors(backcolor='none', frontcolor='white')
+    else:
+        set_colors(backcolor=backcolor, frontcolor=frontcolor)
+
     custom_color_cycle()
     check_latex()
+
+def set_colors(backcolor='white', frontcolor='black'):
+    """
+    Set the colors for the plot.
+
+    Parameters:
+    - backcolor (str): The background color of the plot. Default is 'white'.
+    - frontcolor (str): The foreground color of the plot. Default is 'black'.
+    """
+
+    mpl.rcParams['text.color'] = frontcolor
+    mpl.rcParams['axes.labelcolor'] = frontcolor
+    mpl.rcParams['axes.edgecolor'] = frontcolor
+    mpl.rcParams['xtick.color'] = frontcolor
+    mpl.rcParams['ytick.color'] = frontcolor
+    mpl.rcParams['axes.facecolor'] = backcolor
+    mpl.rcParams['figure.facecolor'] = backcolor
+    mpl.rcParams['legend.facecolor'] = backcolor
+    #mpl.rcParams['legend.edgecolor'] = frontcolor
+    mpl.rcParams['axes.titlecolor'] = frontcolor
+    mpl.rcParams['legend.labelcolor'] = frontcolor
+    mpl.rcParams['grid.color'] = frontcolor
+    mpl.rcParams['lines.color'] = frontcolor
 
 def reset_rc():
     mpl.rcParams.update(mpl.rcParamsDefault)
@@ -185,7 +200,7 @@ def custom_corner(function):
             #'ytick.major.width': 1.,
             'ytick.minor.visible': False,
             'ytick.direction': 'out',
-            'ytick.labelsize': 'medium',
+            'ytick.labelsize': 20,
             'lines.linewidth': 1.5,
             }
         

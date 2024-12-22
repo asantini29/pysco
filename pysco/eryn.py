@@ -962,15 +962,16 @@ class SamplesLoader():
                 logL (array): 1D array containing the log likelihood.
                 logP (array): 1D array containing the log posterior
             else:
-                samples_out (dict): Dictionary containing the samples for each branch, the log likelihood and the log posterior.
-            
+                samples_out (dict): Dictionary containing the samples for each branch, 
+                                    the log likelihood and the log posterior.
         """
+
         if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
             self.compute_discard_thin(ess=ess)
         
         discard, thin = self.discard, self.thin
 
-        samples = self.backend.get_chain(discard=discard, thin=thin)
+        samples = self.backend.get_chain(discard=discard, thin=thin) #todo: this is not addressing the nans in the RJ chains
 
         samples_out = {}
 
