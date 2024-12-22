@@ -1,4 +1,5 @@
 import sys, os
+import shutil
 import glob
 import warnings
 import time
@@ -62,3 +63,22 @@ def timeit(function):
         return out
 
     return wrapper
+
+def remove_directory(path):
+    """
+    Removes a directory and all its contents.
+
+    Args:
+        path (str): The path to the directory to remove.
+    """
+    try:
+        if os.path.exists(path):
+            if os.path.isdir(path):
+                shutil.rmtree(path)  # Removes the directory and all its contents
+                print(f"Directory '{path}' and its contents have been removed.")
+            else:
+                print(f"The path '{path}' is not a directory.")
+        else:
+            print(f"The path '{path}' does not exist.")
+    except Exception as e:
+        print(f"Error removing directory '{path}': {e}")

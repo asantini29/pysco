@@ -9,7 +9,7 @@ from .utils import find_files
 
 import warnings
 
-from eryn.utils import get_integrated_act, psrf, Stopping, SearchConvergeStopping
+from eryn.utils import get_integrated_act, psrf, Stopping, SearchConvergeStopping, stepping_stone_log_evidence
 from eryn.backends import HDFBackend
 from eryn import moves
 
@@ -233,6 +233,7 @@ class DiagnosticPlotter:
         iteration = self.sampler.iteration
         samples = self.sampler.get_chain(discard=int(self.discard * iteration), thin=1)
         logl = self.sampler.get_log_like(discard=int(self.discard * iteration), thin=1)
+        betas = self.sampler.get_betas(discard=int(self.discard * iteration), thin=1)
 
         all_kwargs = {**self.plot_kwargs, **kwargs}
         # Plot the corner and trace plots
@@ -250,12 +251,14 @@ class DiagnosticPlotter:
 
         # Plot the log likelihood evolution
         self.plot_logl_evolution(logl)
+        self.plot_logl_betas(betas, logl)
+
 
 
         if return_samples:
             return samples, logl
 
-    def plot_corners(self, samples, logl, trace=True, covs=True, **kwargs):
+    def  plot_corners(self, samples, logl, trace=True, covs=True, **kwargs):
         """
         Plot corner plots and trace plots for the given samples.
 
@@ -308,7 +311,7 @@ class DiagnosticPlotter:
                                             )
                 except:
                     print('Could not plot the corner plot for branch', key)
-                    continue
+                    fig = None
 
                 
                 if self.mixture_here:
@@ -334,10 +337,9 @@ class DiagnosticPlotter:
                                 ell = mpl.patches.Ellipse(xy=mean, width=v[j], height=v[j+1], angle=180. + angle, color='k', facecolor='none', alpha=0.5)
                                 fig.axes[ndim].add_patch(ell)
                                 fig.axes[ndim].plot(mean[0], mean[1], 'x', color='k', alpha=0.5)
-
-                fig.savefig(self.path + key + '_cornerplot_T%.i' % temp  + self.suffix, dpi=150)
-
-                plt.close()
+                if fig:
+                    fig.savefig(self.path + key + '_cornerplot_T%.i' % temp  + self.suffix, dpi=150)
+                    plt.close()
 
                 if trace:
                     fig, axs = plt.subplots(self.sampler.ndims[key], 1, sharex=True)
@@ -606,6 +608,33 @@ class DiagnosticPlotter:
             plt.axhline(self.true_logl, color='k', ls='--', lw=2)
         plt.ylabel(r'$\log{\mathcal{L}}$')
         fig.savefig(self.path + 'loglike_evolution' + self.suffix, dpi=150)
+
+        plt.close()
+
+    def plot_logl_betas(self, betas, logl):
+        """
+        Plots the evolution of log-likelihood values for each temperature.
+
+        Args:
+            betas (numpy.ndarray): Array of inverse temperatures.
+            logl (numpy.ndarray): Array of log-likelihood values.
+
+        Returns:
+            None
+        """
+        fig = plt.figure()
+        for temp in range(self.nt):
+            plt.loglog(betas[-1, temp], np.mean(logl[:, temp]), '.', c=self.tempcolors[temp], label=f'$T_{temp}$')
+
+        if self.true_logl is not None:
+            plt.axhline(self.true_logl, color='k', ls='--', lw=2)
+
+        logZ, dlogZ = stepping_stone_log_evidence(betas[-1], logl)
+        
+        plt.ylabel(r'$\log{\mathcal{L}}$')
+        plt.xlabel(r'$\beta$')
+        plt.title(r'$\log{\mathcal{Z}} = %.2f \pm %.2f$' % (logZ, dlogZ))
+        fig.savefig(self.path + 'loglike_betas' + self.suffix, dpi=150)
 
         plt.close()
 
@@ -919,7 +948,7 @@ class SamplesLoader():
         self._transform_fn = transform_fn
 
 
-    def load(self, ess=1e4, squeeze=False):
+    def load(self, ess=1e4, squeeze=False, leaves_to_ndim=False):
         """
         Load the samples from the backend.
 
@@ -948,26 +977,29 @@ class SamplesLoader():
         logP = self.backend.get_log_posterior(discard=discard, thin=thin)[:, 0].flatten()
         logL = self.backend.get_log_like(discard=discard, thin=thin)[:, 0].flatten()
 
-        samples_out['logP'] = logP
-        samples_out['logL'] = logL
+        #samples_out['logP'] = logP
+        #samples_out['logL'] = logL
 
         branches = self.backend.branch_names
         for branch in branches:
-            ndim = self.backend.ndims[branch]
             samples_here = samples[branch]
+            nsteps, ntemps, nw, nleaves, ndim = samples_here.shape
             if self.transform_fn is not None:
                 if not isinstance(self.transform_fn, dict):
                     samples_here = self.transform_fn.both_transforms(samples_here)  
                 else:  
                     samples_here = self.transform_fn[branch].both_transforms(samples_here)
             
-            samples_here = samples_here[:, 0].reshape(-1, ndim) # take only the zero temperature chain
+            if leaves_to_ndim:
+                samples_here = samples_here[:, 0].reshape(-1, nleaves*ndim) # take only the zero temperature chain
+            else:
+                samples_here = samples_here[:, 0].reshape(-1, ndim) # take only the zero temperature chain
             samples_out[branch] = samples_here
         
         if len(branches) == 1 and squeeze:
             return samples_out[branch], logL, logP
         else:
-            return samples_out
+            return samples_out, logL, logP
         
     def get_leaves(self, ess=1e4):
         """

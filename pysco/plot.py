@@ -74,7 +74,6 @@ def default_plotting(backcolor='white', frontcolor='black'):
     default_rcParams = {
         'text.usetex': True,
         'font.family': 'serif',
-        'font.serif': 'cmr10',
         'font.weight':'medium',
         'mathtext.fontset': 'cm',
         'text.latex.preamble': r"\usepackage{amsmath}",
