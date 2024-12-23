@@ -119,6 +119,7 @@ def default_plotting(style='light', backcolor=None, frontcolor=None):
         set_colors(backcolor='white', frontcolor='black')
     elif style == 'dark':
         set_colors(backcolor='none', frontcolor='white')
+        mpl.rcParams['savefig.format'] = 'png'
     else:
         set_colors(backcolor=backcolor, frontcolor=frontcolor)
 
@@ -493,6 +494,9 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     fig = C.plotter.plot(offset=offset)
     axes = fig.get_axes()
     for ax in axes:
+        ax.minorticks_on()
+        ax.tick_params(which='both', direction='in', top=True, right=True)
+
         x_range = ax.get_xlim()
         y_range = ax.get_ylim()
 
