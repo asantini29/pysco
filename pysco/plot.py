@@ -367,7 +367,28 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, fontsize=18, ticksize=14, ls=None, offset=True, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
+def align_scientific_notation_factors(axes, row_indices): #todo this is not working, has to be fixed
+    # Collect the y positions of the offset text for all subplots in the row
+    offset_positions = []
+    for idx in row_indices:
+        offset_text = axes[idx].xaxis.get_offset_text()
+        offset_text.set_visible(True)
+        offset_positions.append(offset_text.get_position()[1])
+
+    # Find the minimum y position (highest in plot coordinates) for alignment
+    target_y_position = min(offset_positions)
+
+    # Align all offset texts to this position
+    for idx in row_indices:
+        offset_text = axes[idx].xaxis.get_offset_text()
+        #offset_text.set_position((offset_text.get_position()[0], target_y_position))
+        offset_text.set_y(target_y_position)
+
+    # Adjust padding between axis and label if needed
+    for idx in row_indices:
+        axes[idx].xaxis.labelpad += 10  # Adjust this value as required for spacing
+
+def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, ls=None, offset=True, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
     """
     Plot chains of samples using ChainConsumer library.
 
@@ -378,8 +399,6 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     - truths (array-like, optional): Array-like object containing the true values to be plotted as a reference line. Default is None.
     - plot_dir (str, optional): Directory to save the plot. Default is './'.
     - savename (str, optional): Name of the saved plot file. If not provided, the plot will be displayed instead of saved.
-    - fontsize (int, optional): Font size for the plot. Default is 18.
-    - ticksize (int, optional): Font size for the tick labels. Default is 14.
     - ls (str, optional): Line style for the chains. Default is None. If not provided, the line style will be automatically assigned to be different for each dataframe.
     - offset (bool, optional): Whether to offset the chains vertically. Default is True.
     - chain_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.Chain constructor.
@@ -420,7 +439,10 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
             colors = get_colors_from_cmap(n_chains, cmap='gist_rainbow')
     while n_chains > len(lss):
         lss = lss + lss
-
+    
+    fontsize = mpl.rcParams['font.size']
+    ticksize = mpl.rcParams['xtick.labelsize']
+    offset_fontsize = fontsize - 2
 
     C = chainconsumer.ChainConsumer()
 
@@ -445,7 +467,7 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
         C.add_chain(chain)
 
     if truths is not None:
-        C.add_truth(chainconsumer.Truth(location=truths, color='k', line_style="-", name="Injection"))
+        C.add_truth(chainconsumer.Truth(location=truths, color=mpl.rcParams['text.color'], line_style="-", name="Injection"))
     #c.add_marker(location=df_truths[plotting_columns[:-1]], color='k', marker_style='x', marker_size=20, name="Injection")
 
     default_chain_kwargs = {
@@ -493,29 +515,40 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
 
     fig = C.plotter.plot(offset=offset)
     axes = fig.get_axes()
-    for ax in axes:
-        ax.minorticks_on()
-        ax.tick_params(which='both', direction='in', top=True, right=True)
+    # format_ticks(axes)
 
-        x_range = ax.get_xlim()
-        y_range = ax.get_ylim()
-
-        # If the axis range is very small (e.g., close to 1e-15), use scientific notation
-        if abs(x_range[1] - x_range[0]) < 1e-3 or abs(y_range[1] - y_range[0]) < 1e-3:
-            ax.ticklabel_format(style='scientific', axis='both', scilimits=(-3, 3))
-        else:
-            ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
-            ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
-
-        # Set the label coordinates for consistent alignment
-        ax.xaxis.set_label_coords(0.5, -0.32)  # Adjust x-label position (relative to axis)
-        ax.yaxis.set_label_coords(-0.32, 0.5)  # Adjust y-label position (relative to axis)
+    ndim = len(columns_here)
+    indices_first_row = np.arange(0, len(axes), 1)[len(axes) - ndim:]
+    indices_first_column = np.arange(0, len(axes), ndim)
 
 
+    for i, ax in enumerate(axes):
+        # Use ScalarFormatter for scientific notation
+        ax.xaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True, useOffset=True))
+        ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True, useOffset=True))
+
+        #isnegative = ax.get_xticks()[0] < 0
+        offset_amount = 0.3 #if isnegative else 1.3
+        # Adjust offset text position for x-axis
+        x_offset = ax.xaxis.get_offset_text()
+        x_offset.set_x(1.0)  # Fine-tune as needed
+        x_offset.set_y(-offset_amount)  # Move below the axis
+        # set fontsize
+        x_offset.set_fontsize(offset_fontsize)
+
+        # Adjust offset text position for y-axis
+        y_offset = ax.yaxis.get_offset_text()
+        y_offset.set_fontsize(offset_fontsize)
+
+        # Increase padding between labels and ticks
+        ax.xaxis.set_label_coords(0.5, -0.6)  # Adjust label position manually
+        ax.yaxis.set_label_coords(-0.4, 0.5)
+
+    align_scientific_notation_factors(axes, indices_first_row)
 
     #plt.tight_layout()
     if savename is not None:
-        plt.savefig(plot_dir + savename + '.pdf', bbox_inches='tight')
+        plt.savefig(plot_dir + savename)
         plt.close()
     # else:
     #     plt.show()
