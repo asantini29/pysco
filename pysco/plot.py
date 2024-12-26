@@ -367,50 +367,46 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def align_scientific_notation_factors(axes, row_indices): #todo this is not working, has to be fixed
-    # Collect the y positions of the offset text for all subplots in the row
-    offset_positions = []
-    for idx in row_indices:
-        offset_text = axes[idx].xaxis.get_offset_text()
-        offset_text.set_visible(True)
-        offset_positions.append(offset_text.get_position()[1])
-
-    # Find the minimum y position (highest in plot coordinates) for alignment
-    target_y_position = min(offset_positions)
-
-    # Align all offset texts to this position
-    for idx in row_indices:
-        offset_text = axes[idx].xaxis.get_offset_text()
-        #offset_text.set_position((offset_text.get_position()[0], target_y_position))
-        offset_text.set_y(target_y_position)
-
-    # Adjust padding between axis and label if needed
-    for idx in row_indices:
-        axes[idx].xaxis.labelpad += 10  # Adjust this value as required for spacing
-
-def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, ls=None, offset=True, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
+def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, ls=None, offset=True, padding=1.0, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
     """
-    Plot chains of samples using ChainConsumer library.
-
+    Plots MCMC chains using ChainConsumer.
     Parameters:
-    - dfs (list or dict): List of pandas DataFrames or dictionary of pandas DataFrames containing the samples for each chain.
-    - names (list or str, optional): List of names for each chain. If not provided, names will be automatically assigned.
-    - columns (int or list, optional): Number of columns to include in the plot or list of column names to include. Default is None, which includes all columns.
-    - truths (array-like, optional): Array-like object containing the true values to be plotted as a reference line. Default is None.
-    - plot_dir (str, optional): Directory to save the plot. Default is './'.
-    - savename (str, optional): Name of the saved plot file. If not provided, the plot will be displayed instead of saved.
-    - ls (str, optional): Line style for the chains. Default is None. If not provided, the line style will be automatically assigned to be different for each dataframe.
-    - offset (bool, optional): Whether to offset the chains vertically. Default is True.
-    - chain_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.Chain constructor.
-    - chainconfig_kwargs (dict, optional): Additional keyword arguments to be passed to the ChainConsumer.ChainConfig constructor.
-    - legend_kwargs (dict, optional): Additional keyword arguments to be passed to the legend configuration.
-    - plotconfig_kwargs (dict, optional): Additional keyword arguments to be passed to the plot configuration.
-
+    -----------
+    dfs : list or dict
+        List or dictionary of dataframes containing MCMC samples.
+    names : list, optional
+        List of names for each chain. If `dfs` is a dictionary, keys are used as names.
+    columns : int or list, optional
+        Columns to be used for plotting. If None, all columns are used. If int, first `columns` columns are used.
+        If list, specific columns are used. If list of lists, different columns for each chain.
+    truths : list, optional
+        List of true values to be plotted as reference lines.
+    plot_dir : str, optional
+        Directory to save the plot. Default is current directory.
+    savename : str, optional
+        Name of the file to save the plot. If None, plot is not saved.
+    ls : str, optional
+        Line style for the chains. If None, default styles are used.
+    offset : bool, optional
+        Whether to offset the plot. Default is True.
+    padding : float or tuple, optional
+        Padding between labels and ticks. Default is 1.0.
+    chain_kwargs : dict, optional
+        Additional keyword arguments for ChainConsumer.Chain.
+    chainconfig_kwargs : dict, optional
+        Additional keyword arguments for ChainConsumer.ChainConfig.
+    legend_kwargs : dict, optional
+        Additional keyword arguments for the legend.
+    plotconfig_kwargs : dict, optional
+        Additional keyword arguments for ChainConsumer.PlotConfig.
     Returns:
-    - C (ChainConsumer): The ChainConsumer object containing the chains.
-    - fig (matplotlib.figure.Figure): The matplotlib figure object.
-
+    --------
+    C : ChainConsumer
+        ChainConsumer object containing the chains.
+    fig : matplotlib.figure.Figure
+        Figure object containing the plot.
     """
+
 
     if not isinstance(dfs, list):
         
@@ -518,6 +514,7 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     # format_ticks(axes)
 
     ndim = len(columns_here)
+
     indices_first_row = np.arange(0, len(axes), 1)[len(axes) - ndim:]
     indices_first_column = np.arange(0, len(axes), ndim)
 
@@ -529,7 +526,6 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
 
         #isnegative = ax.get_xticks()[0] < 0
         offset_amount = 0.3 #if isnegative else 1.3
-        # Adjust offset text position for x-axis
         x_offset = ax.xaxis.get_offset_text()
         x_offset.set_x(1.0)  # Fine-tune as needed
         x_offset.set_y(-offset_amount)  # Move below the axis
@@ -541,10 +537,13 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
         y_offset.set_fontsize(offset_fontsize)
 
         # Increase padding between labels and ticks
-        ax.xaxis.set_label_coords(0.5, -0.6)  # Adjust label position manually
-        ax.yaxis.set_label_coords(-0.4, 0.5)
-
-    align_scientific_notation_factors(axes, indices_first_row)
+        if isinstance(padding, float):
+            xpad = padding
+            ypad = padding
+        else:
+            xpad, ypad = padding
+        ax.xaxis.set_label_coords(0.5, -0.2*xpad)  # Adjust label position manually
+        ax.yaxis.set_label_coords(-0.2*ypad, 0.5)
 
     #plt.tight_layout()
     if savename is not None:
