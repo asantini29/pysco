@@ -82,3 +82,22 @@ def remove_directory(path):
             print(f"The path '{path}' does not exist.")
     except Exception as e:
         print(f"Error removing directory '{path}': {e}")
+
+def remove_files(directory, files):
+    """
+    Removes a list of files from a directory.
+
+    Args:
+        directory (str): The directory containing the files to remove.
+        files (list): List of files to remove.
+    """
+    for file in files:
+        file = os.path.join(directory, file)
+        try:
+            if os.path.exists(file):
+                os.remove(file)
+                print(f"File '{file}' has been removed.")
+            else:
+                print(f"The file '{file}' does not exist.")
+        except Exception as e:
+            print(f"Error removing file '{file}': {e}")

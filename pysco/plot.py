@@ -4,7 +4,7 @@ from functools import wraps
 from importlib.machinery import SourceFileLoader
 import os
 import warnings
-from distutils.spawn import find_executable
+from shutil import which as find_executable
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt

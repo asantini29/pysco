@@ -588,7 +588,7 @@ class DiagnosticPlotter:
         plt.legend()
 
         fig.savefig(self.path + 'act_evolution' + self.suffix, dpi=150)
-
+        plt.close()
     
     def plot_logl_evolution(self, logl):
         """
@@ -1031,7 +1031,7 @@ class SamplesLoader():
             chain = samples[name]
             nsteps, ntemps, nw, nleaves, ndims = chain.shape
             chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
-            tau[name] = get_integrated_act(chain, average=True)
+            tau[name] = get_integrated_act(chain, average=True, fast=True)
         
         taus_all = []
 
