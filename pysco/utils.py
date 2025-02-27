@@ -101,3 +101,17 @@ def remove_files(directory, files):
                 print(f"The file '{file}' does not exist.")
         except Exception as e:
             print(f"Error removing file '{file}': {e}")
+
+def reorder_dict(dict_in, ordered_keys):
+    """
+    Reorder the keys of a dictionary.
+
+    Args:
+        dict_in (dict): The dictionary to reorder.
+        ordered_keys (list): The keys of the dictionary in the desired order.
+
+    Returns:
+        dict_out (dict): The reordered dictionary.
+    """
+    dict_out = {key: dict_in[key] for key in ordered_keys}
+    return dict_out

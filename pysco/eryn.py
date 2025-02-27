@@ -1,15 +1,22 @@
 import sys, os
 import numpy as np
+from scipy.special import logsumexp
 import pysco
 import matplotlib as mpl
 from matplotlib.colors import to_rgba
 import matplotlib.pyplot as plt
 import pandas as pd
-from .utils import find_files
+from copy import deepcopy
+import pickle as pkl
+from tqdm import tqdm
+import h5py
+
+
+from .utils import find_files, reorder_dict
 
 import warnings
 
-from eryn.utils import get_integrated_act, psrf, Stopping, SearchConvergeStopping, stepping_stone_log_evidence
+from eryn.utils import get_integrated_act, psrf, Stopping, SearchConvergeStopping, stepping_stone_log_evidence, groups_from_inds
 from eryn.backends import HDFBackend
 from eryn import moves
 
@@ -200,9 +207,12 @@ class DiagnosticPlotter:
                     label = f'Move {i}'
                 self.acceptance_moves[label] = np.array([])
 
-                if isinstance(move, moves.GaussianMixtureProposal):
-                    self.mixture_here = True
-                    self.mixture_idx = i
+                try:
+                    if isinstance(move, moves.GaussianMixtureProposal):
+                        self.mixture_here = True
+                        self.mixture_idx = i
+                except:
+                    pass
 
             if self.has_rj:
                 self.rj_acceptance_all = []
@@ -288,7 +298,7 @@ class DiagnosticPlotter:
             truths_here = self.truths[key]
             labels_here = self.labels[key]
 
-            for temp in self.temperaturestoplot:
+            for count, temp in enumerate(self.temperaturestoplot):
                 chain = get_clean_chain(samples_here, ndim=ndims, temp=temp)
 
                 if self.nleaves_min[key] == self.nleaves_max[key] == 1:
@@ -338,7 +348,10 @@ class DiagnosticPlotter:
                                 fig.axes[ndim].add_patch(ell)
                                 fig.axes[ndim].plot(mean[0], mean[1], 'x', color='k', alpha=0.5)
                 if fig:
-                    fig.savefig(self.path + key + '_cornerplot_T%.i' % temp  + self.suffix, dpi=150)
+                    if count == 0:
+                        fig.savefig(self.path + key + '_cornerplot' + self.suffix, dpi=150)
+                    else:
+                        fig.savefig(self.path + key + '_cornerplot_T%.i' % temp  + self.suffix, dpi=150)
                     plt.close()
 
                 if trace:
@@ -923,6 +936,98 @@ class AutoCorrelationStopping(Stopping):
         
         return int(np.ceil(self.ess * tau / nw))
     
+@pysco.utils.timeit
+def compute_discard_thin(backend, ess=1e4):
+    """
+    Compute the number of samples to discard and thin.
+
+    Args:
+        backend (object): The backend object.
+        ess (float): Effective sample size. Default is 1e4.
+    Returns:    
+        None
+    """
+    samples = backend.get_chain()
+    tau = {}
+    for name in samples.keys():
+        chain = samples[name]
+        nsteps, ntemps, nw, nleaves, ndims = chain.shape
+        chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
+        tau[name] = get_integrated_act(chain, average=True, fast=True)
+    
+    taus_all = []
+
+    for name in tau.keys():
+        tau_here = np.max(tau[name])
+        if np.isfinite(tau_here):
+            taus_all.append(tau_here)
+    
+    thin = int(np.max(taus_all))
+    print("Number of steps: ", nsteps)
+
+    ess = int(ess)
+    N_keep = int(np.ceil(ess * thin / nw))
+    print("Number of samples to keep: ", N_keep)
+    discard = max(5000, backend.iteration - N_keep)
+
+    return discard, thin
+
+def arrange_inds(inds):
+    """
+    Rearrange the indices in an array of dictionary containing the indices at each step.
+
+    Args:
+        inds (dict): dictionary containing the indices at every.
+    
+    Returns:
+        inds_out (object): The rearranged indices.
+    """
+
+    keys = list(inds.keys())    
+    nsteps = inds[keys[0]].shape[0]
+
+    inds_out = np.empty(shape=(nsteps, ), dtype=dict)  
+
+    for i in range(nsteps):
+        inds_tmp = {}
+        for key in keys:
+            inds_tmp[key] = inds[key][i]
+        
+        inds_out[i] = inds_tmp
+    
+    return inds_out
+
+def get_groups_from_inds_array(inds):
+    """
+    
+    """
+    keys = list(inds.keys())
+    nsteps, ntemps, nw, _ = inds[keys[0]].shape
+    inds_array = arrange_inds(inds)
+    groups_array = np.empty_like(inds_array)
+
+    for step in range(nsteps):
+        groups_array[step] = groups_from_inds(inds_array[step])
+
+    return groups_array
+
+def get_groups_from_all_inds(inds):
+    """
+    
+    """
+    keys = list(inds.keys())
+    groups_array = get_groups_from_inds_array(inds)
+
+    nsteps = len(groups_array)
+    groups_out = {}
+    for key in keys:
+        #groups_out[key] = np.stack([groups_array[step][key] for step in range(nsteps)], axis=0)
+        groups_out[key] = [groups_array[step][key] for step in range(nsteps)]
+
+    return groups_out
+
+
+
 
 class SamplesLoader():
     def __init__(self, path, transform_fn=None):
@@ -948,13 +1053,16 @@ class SamplesLoader():
         self._transform_fn = transform_fn
 
 
-    def load(self, ess=1e4, squeeze=False, leaves_to_ndim=False):
+    def load(self, ess=1e4, discard=None, thin=None, squeeze=False, leaves_to_ndim=False):
         """
         Load the samples from the backend.
 
         Args:
             ess (float): Effective sample size. Default is 1e4.
+            discard (int): Number of samples to discard. Default is None.
+            thin (int): Thinning factor. Default is None.
             squeeze (bool): Whether to 'squeeze' the samples. Default is False.
+            leaves_to_ndim (bool): Whether to reshape the samples to have the shape (nsteps, nleaves*ndim). Default is False.
 
         Returns:
             if squeeze == True and there is only one branch:
@@ -966,20 +1074,21 @@ class SamplesLoader():
                                     the log likelihood and the log posterior.
         """
 
-        if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
-            self.compute_discard_thin(ess=ess)
-        
-        discard, thin = self.discard, self.thin
-
+        if discard is None or thin is None:
+            if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
+                discard, thin = compute_discard_thin(backend=self.backend, ess=ess)
+            else:
+                discard, thin = self.discard, self.thin
+        else:
+            discard, thin = int(discard), int(thin) #make sure they are integers
+            self.discard, self.thin = discard, thin
+            
         samples = self.backend.get_chain(discard=discard, thin=thin) #todo: this is not addressing the nans in the RJ chains
 
         samples_out = {}
 
         logP = self.backend.get_log_posterior(discard=discard, thin=thin)[:, 0].flatten()
         logL = self.backend.get_log_like(discard=discard, thin=thin)[:, 0].flatten()
-
-        #samples_out['logP'] = logP
-        #samples_out['logL'] = logL
 
         branches = self.backend.branch_names
         for branch in branches:
@@ -1010,43 +1119,10 @@ class SamplesLoader():
             dict: Dictionary containing the number of leaves for each temperature.
         """
         if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
-            self.compute_discard_thin(ess=ess)
+            self.discard, self.thin = compute_discard_thin(backend=self.backend, ess=ess)
         
         discard, thin = self.discard, self.thin
         return self.backend.get_nleaves(discard=discard, thin=thin)
-    
-    @pysco.utils.timeit
-    def compute_discard_thin(self, ess=1e4):
-        """
-        Compute the number of samples to discard and thin.
-
-        Args:
-            ess (float): Effective sample size. Default is 1e4.
-        Returns:    
-            None
-        """
-        samples = self.backend.get_chain()
-        tau = {}
-        for name in samples.keys():
-            chain = samples[name]
-            nsteps, ntemps, nw, nleaves, ndims = chain.shape
-            chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
-            tau[name] = get_integrated_act(chain, average=True, fast=True)
-        
-        taus_all = []
-
-        for name in tau.keys():
-            tau_here = np.max(tau[name])
-            if np.isfinite(tau_here):
-                taus_all.append(tau_here)
-        
-        self.thin = int(np.max(taus_all))
-        print("Number of steps: ", nsteps)
-
-        ess = int(ess)
-        N_keep = int(np.ceil(ess * self.thin / nw))
-        print("Number of samples to keep: ", N_keep)
-        self.discard = max(5000, self.backend.iteration - N_keep)
     
     def make_dataframe(self, labels=None, samples=None, ess=1e4):
         """
@@ -1091,12 +1167,311 @@ class SamplesLoader():
         return dfs if len(dfs) > 1 else dfs[branch]
         
 
-        
+class ImportanceSampler():
+    def __init__(self, current_backend, target_likelihood, likelihood_kwargs={}, savename='importance_sampler.pkl'):
 
-        
+        '''
+        Initialize the ImportanceSampler object.
 
+        Args:
+            current_backend (str or obj): The current backend.
+            target_likelihood (obj): The target likelihood object.
+            likelihood_kwargs (dict): Additional keyword arguments to pass to the target likelihood function.
+        '''
+
+        if os.path.exists(savename):
+            # Load the object from the pickle file
+            with open(savename, 'rb') as f:
+                obj = pkl.load(f)
+                self.__dict__.update(obj.__dict__)
+        
+        else:
+            if isinstance(current_backend, str):
+                current_backend = HDFBackend(current_backend)
             
+            self.current_backend = current_backend
+            self.target_likelihood = target_likelihood
+            self.likelihood_kwargs = likelihood_kwargs
+
+            self.target_backend = deepcopy(current_backend)
+
+    @property
+    def current_backend(self):
+        return self._current_backend    
+    
+    @current_backend.setter
+    def current_backend(self, current_backend):
+        self._current_backend = current_backend
+    
+    @property
+    def target_backend(self):
+        return self._target_backend
+
+    @target_backend.setter
+    def target_backend(self, target_backend):
+        self._target_backend = target_backend
+
+    @property
+    def current_information(self):    
+        return self._current_information
+
+    @current_information.setter
+    def current_information(self, current_information):
+        self._current_information = current_information
+
+    def save(self):
+        """
+        Dump the ImportanceSampler object to a pickle file.
+        """
+
+        with open(self.savename, 'wb') as f:
+            pkl.dump(self, f)
+    
+    def fetch_current_information(self, ess=1e4, discard=None, thin=None):
+        """
+        Fetch the relevant information contained in the current backend.
+
+        Args:
+            ess (float): Effective sample size. Default is 1e4. It is used if either `discard` or `thin` are None.
+            discard (int): Number of samples to discard. Default is None.
+            thin (int): Thinning factor. Default is None.
+
+        Returns:
+            dict: Dictionary containing the current samples, indices, number of leaves, log posterior and log likelihood.
+        """
+        if discard is None or thin is None:
+            discard, thin = compute_discard_thin(backend=self.current_backend, ess=ess)
+
+        branches = self.current_backend.branch_names
+
+        current_samples = self.current_backend.get_chain(discard=discard, thin=thin)
+        current_inds = self.current_backend.get_inds(discard=discard, thin=thin)
+        current_leaves = self.current_backend.get_nleaves(discard=discard, thin=thin)
+        current_logP = self.current_backend.get_log_posterior(discard=discard, thin=thin)
+        current_logL = self.current_backend.get_log_like(discard=discard, thin=thin)
+        current_logp = self.current_backend.get_log_prior(discard=discard, thin=thin)  
+        current_betas = self.current_backend.get_betas(discard=discard, thin=thin)
+
+        nsteps = current_logL.shape[0]
+        nwalkers = self.current_backend.nwalkers
+        ntemps = self.current_backend.ntemps
+        ndims = self.current_backend.ndims
+        nleaves_max = self.current_backend.nleaves_max
+
+        current_groups = get_groups_from_all_inds(current_inds)
+
+        current_information = {
+            'samples': reorder_dict(current_samples, branches),
+            'inds': reorder_dict(current_inds, branches),
+            'groups': reorder_dict(current_groups, branches),
+            'leaves': reorder_dict(current_leaves, branches),
+            'betas': current_betas,
+            'logP': current_logP,
+            'logL': current_logL,
+            'logp': current_logp,
+            'nwalkers': nwalkers,
+            'nsteps': nsteps,    
+            'ntemps': ntemps,
+            'ndims': ndims,
+            'nleaves_max': nleaves_max
+        }
+
+        self.current_information = current_information
+
+    def compute_target_probabilities(self, samples, groups, current_logL):
+        """
+        Compute the weights for the importance sampling.
+
+        Args:
+            samples (list): current samples.
+            groups (list): groups of indices for the active leaves.
+            current_logL (array): Array of log likelihood values.
+
+        Returns:
+            array: Array of weights.
+        """
+        target_logL = self.target_likelihood(samples, groups, **self.likelihood_kwargs)
+
+        return target_logL
+    
+    def compute_weights(self, current_logL, target_logL):
+        """
+        Compute the weights for the importance sampling.
+
+        Args:
+            current_logL (array): Array of log likelihood values for the current samples.
+            target_logL (array): Array of log likelihood values for the target samples.
+
+        Returns:
+            array: Array of weights.
+        """
+        betas = self.current_information['betas'][..., None]
+
+        Delta_logL = (target_logL - current_logL) * betas
+
+        log_norm = logsumexp(Delta_logL, axis=(0,2), keepdims=True)
+        Delta_logL = Delta_logL - log_norm
+
+        w_i = np.exp(Delta_logL)
+
+        return w_i
+        
+
+    def evaluate(self):
+        """
+        Evaluate the importance sampling weights .
+
+        Returns:
+            weights (array): Array of weights.
+            target_logL (array): Array of the target log likelihood evaluated at the current samples.
+        """
+        
+        all_target_logL = []
+
+        nsteps = self.current_information['nsteps']
+        logL = self.current_information['logL']
+
+        for i in tqdm(range(nsteps)):
+
+            samples_batch = []
+            groups_batch = []
+
+            for branch in self.current_information['samples'].keys():
+                samples_here = self.current_information['samples'][branch][i].reshape(-1, self.current_information['ndims'][branch])
+                groups_here = self.current_information['groups'][branch][i].reshape(-1)
+
+                nanmask = ~np.isnan(samples_here).any(axis=1)
+                samples_here = samples_here[nanmask]
+
+                samples_batch.append(samples_here)
+                groups_batch.append(groups_here)
+
+            flattened_logL = logL[i].reshape(-1)
+
+            flattened_target_logL = self.compute_target_probabilities(samples=samples_batch, groups=groups_batch, current_logL=flattened_logL)
+
+            target_logL_batch = flattened_target_logL.reshape(-1, self.current_information['ntemps'], self.current_information['nwalkers'])
+
+            all_target_logL.append(target_logL_batch)
+        
+        target_logL = np.concatenate(all_target_logL, axis=0)
+
+        weights = self.compute_weights(self.current_information['logL'], target_logL)
+
+        return weights, target_logL
+
+    def resample(self, weights, target_logL):
+        """
+        Resample the current samples using the importance sampling weights as probabilities.
+
+        Args:
+            weights (array): Array of weights.
+            target_logL (array): Array of the target log likelihood evaluated at the current samples.
+
+        Returns:
+            new_samples (dict): Dictionary containing the resampled samples.
+            new_inds (dict): Dictionary containing the resampled indices.
+        """
+
+        keys = list(self.current_information['samples'].keys())
+        nsteps, ntemps, nw, = self.current_information['nsteps'], self.current_information['ntemps'], self.current_information['nwalkers']
+
+        N_samples = self.current_information['nwalkers'] * self.current_information['nsteps'] 
+        new_samples = {key: np.empty_like(self.current_information['samples'][key]) for key in keys}
+        new_inds = {key: np.empty_like(self.current_information['inds'][key]) for key in keys}
+
+        new_logL = np.empty_like(self.current_information['logL'])
+        new_logp = np.empty_like(self.current_information['logp'])
 
 
+        for temp in range(ntemps):
+           
+            draws = np.random.choice(N_samples, size=N_samples, p=weights[:, temp].flatten())
+
+            for key in keys:
+                old_samples_here = self.current_information['samples'][key][:, temp]
+                old_inds_here = self.current_information['inds'][key][:, temp]
+                _, _, nleaves, ndims = old_samples_here.shape
+                new_samples_here = old_samples_here.reshape(nsteps * nw, nleaves, ndims)[draws].reshape(nsteps, nw, nleaves, ndims)
+                new_inds_here = old_inds_here.reshape(nsteps * nw, nleaves)[draws].reshape(nsteps, nw, nleaves)
+                new_samples[key][:, temp] = new_samples_here
+                new_inds[key][:, temp] = new_inds_here
+
+            new_logL[:, temp] = target_logL[:, temp].flatten()[draws].reshape(nsteps, nw)
+            new_logp[:, temp] = self.current_information['logp'][:, temp].flatten()[draws].reshape(nsteps, nw)
+
+        return new_samples, new_inds, new_logp, new_logL
+    
+    def update_target_backend(self, new_samples, new_inds, new_logp, new_logL):
+        """
+        Update the target backend with the new samples.
+
+        Args:
+            new_samples (dict): Dictionary containing the resampled samples.
+            new_inds (dict): Dictionary containing the resampled indices.
+            new_logprior (array): Array of log prior values for the resampled samples.
+            new_logL (array): Array of log likelihood values for the target samples.
+        """
+        self.target_backend.chain = new_samples
+        self.target_backend.inds = new_inds
+        self.target_backend.log_prior = new_logp
+        self.target_backend.log_like = new_logL
+
+    def save_target_backend(self, backend='./importance_resampled_backend.h5'):
+        """
+        Save the target backend to a h5 file.
+
+        Args:
+            savename (str): Name of the file to save the target backend.
+        """
+
+        with h5py.File(backend, 'w') as f:
+            
+            g = f.create_group(self.target_backend.name)
+
+            g.attrs["branch_names"] = list(self.target_backend.chain.keys())
+            g.attrs["ntemps"] = self.current_information['ntemps']
+            g.attrs["nwalkers"] = self.current_information['nwalkers']
+            g.attrs["iteration"] = self.current_information['nsteps']
+
+            ndims, nleaves_max = self.current_information['ndims'], self.current_information['nleaves_max']
+
+            g.create_group("ndims")
+            for key, value in ndims.items():
+                g["ndims"].attrs[key] = value
+
+            g.create_group("nleaves_max")
+            for key, value in nleaves_max.items():
+                g["nleaves_max"].attrs[key] = value
+
+            g.create_dataset('log_prior', data=self.target_backend.log_prior)
+            g.create_dataset('log_like', data=self.target_backend.log_like)
+            g.create_dataset("betas", data=self.current_information['betas'])
+
+            chain = g.create_group("chain")
+            inds = g.create_group("inds")
+
+            for key in self.target_backend.chain.keys():
+                chain.create_dataset(key, data=self.target_backend.chain[key])
+                inds.create_dataset(key, data=self.target_backend.inds[key])   
 
 
+    def run(self, ess = 1e4, backend='./importance_resampled_backend.h5'):
+        """
+        Run the importance sampler.
+
+        Args:
+            ess (float): Effective sample size. Default is 1e4.
+            savename (str): Name of the file to save the target backend.
+        
+        Returns:
+            dict: Dictionary containing the resampled samples.
+        """
+
+        self.fetch_current_information(ess=ess)
+        weights, target_logL = self.evaluate()
+        new_samples, new_inds, new_logp, new_logL = self.resample(weights, target_logL)
+        self.update_target_backend(new_samples, new_inds, new_logp, new_logL)
+        self.save_target_backend(backend=backend)
+
+        return new_samples
