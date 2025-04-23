@@ -414,8 +414,14 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
             names = list(dfs.keys())
             dfs = list(dfs.values())
         else:
-            names = [names]
+            names = [names] if isinstance(names, str) else ["Chain"]
             dfs = [dfs]
+    
+    else:
+        if names is None:
+            names = [f"Chain {i}" for i in range(len(dfs))]
+        else:
+            assert len(names) == len(dfs), "Number of names must match number of chains"
         
     n_chains = len(dfs)
 

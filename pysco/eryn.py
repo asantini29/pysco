@@ -1,5 +1,6 @@
 import sys, os
 import numpy as np
+import scipy
 from scipy.special import logsumexp
 import pysco
 import matplotlib as mpl
@@ -11,14 +12,23 @@ import pickle as pkl
 from tqdm import tqdm
 import h5py
 
+import pysco.plot
+
 
 from .utils import find_files, reorder_dict
 
 import warnings
 
+import eryn
 from eryn.utils import get_integrated_act, psrf, Stopping, SearchConvergeStopping, stepping_stone_log_evidence, groups_from_inds
 from eryn.backends import HDFBackend
 from eryn import moves
+
+try:
+    import nautilus
+    nautilus_here = True
+except:
+    nautilus_here = False
 
 def get_numpy(x):
     try:
@@ -637,7 +647,8 @@ class DiagnosticPlotter:
         """
         fig = plt.figure()
         for temp in range(self.nt):
-            plt.loglog(betas[-1, temp], np.mean(logl[:, temp]), '.', c=self.tempcolors[temp], label=f'$T_{temp}$')
+            mask = np.isfinite(logl[:, temp])
+            plt.loglog(betas[-1, temp], np.mean(logl[:, temp][mask]), '.', c=self.tempcolors[temp], label=f'$T_{temp}$')
 
         if self.true_logl is not None:
             plt.axhline(self.true_logl, color='k', ls='--', lw=2)
@@ -775,7 +786,7 @@ class GelmanRubinStopping(Stopping):
 
 class AutoCorrelationStopping(Stopping):
     
-    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, ess=None, transform_fn=None, n_iters=30, diff=0.1, start_iteration=0):
+    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, all_temps=False, ess=None, transform_fn=None, n_iters=5, diff=0.1, start_iteration=0):
         """
         Stopping criterion based on the auto-correlation time.
 
@@ -784,9 +795,14 @@ class AutoCorrelationStopping(Stopping):
             verbose (bool): Whether to print the diagnostic values. Default is False.
             N (int): Number of iterations to run after convergence. Default is 0, meaning that the run is stopped as soon as the threshold is reached.
             n_skip (int): Number of iterations to skip before applying the stopping criterion. Default is 0.
+            all_temps (bool): Whether to compute the auto-correlation time across all temperatures. Default is False.
             ess (float): Effective sample size. Default is None.
             transform_fn (callable): Function to transform the chains before computing the diagnostic. Default is None.
+            n_iters (int): Number of iterations to check for Likelihood convergence. Default is 5.
+            diff (float): Difference threshold for Likelihood convergence. Default is 0.1.
+            start_iteration (int): Iteration to start applying the stopping criterion. Default is 0.
         """
+
         self.autocorr_multiplier = autocorr_multiplier
         self.verbose = verbose
         self.time = 0
@@ -795,7 +811,7 @@ class AutoCorrelationStopping(Stopping):
         self.ess = ess
         self.when_to_stop = np.inf
         self.transform_fn = transform_fn
-
+        self.all_temps = all_temps
         #likelihood checks. Adapted from the SearchConvergenceStopping criterion
         self.n_iters = n_iters
         self.diff = diff
@@ -844,6 +860,8 @@ class AutoCorrelationStopping(Stopping):
             chain = samples[name]
             nsteps, ntemps, nw, nleaves, ndims = chain.shape
             chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
+            ind = ntemps if self.all_temps else 1
+            chain = chain[:, :ind]
             tau[name] = get_integrated_act(chain, average=True)
 
         #tau = get_integrated_act(samples)
@@ -965,11 +983,14 @@ def compute_discard_thin(backend, ess=1e4):
     thin = int(np.max(taus_all))
     print("Number of steps: ", nsteps)
 
-    ess = int(ess)
-    N_keep = int(np.ceil(ess * thin / nw))
-    print("Number of samples to keep: ", N_keep)
-    discard = max(5000, backend.iteration - N_keep)
-
+    if ess is not None:
+        ess = int(ess)
+        N_keep = int(np.ceil(ess * thin / nw))
+        print("Number of samples to keep: ", N_keep)
+        discard = max(5000, backend.iteration - N_keep)
+    else:
+        discard = int(2*thin)
+        print("Number of samples to discard: ", discard)
     return discard, thin
 
 def arrange_inds(inds):
@@ -1475,3 +1496,313 @@ class ImportanceSampler():
         self.save_target_backend(backend=backend)
 
         return new_samples
+
+#! Nautilus interface 
+if nautilus_here:
+    class NautilusWrapper:
+        """
+        Take a fully defined Eryn EnsembleSampler object and wrap it in a Nautilus interface.
+        """
+        def __init__(self, eryn_sampler):
+            self.eryn_sampler = eryn_sampler
+
+        def setup_rj_branches(self):
+            """
+            Identify the RJ branches in the original sampler.
+            """
+            nleaves_max = self.eryn_sampler.nleaves_max
+            nleaves_min = self.eryn_sampler.nleaves_min if hasattr(self.eryn_sampler, 'nleaves_min') else nleaves_max
+            branches = self.eryn_sampler.branch_names
+
+            self.rj_branches = [branch for branch in branches if nleaves_max[branch] > nleaves_min[branch]]
+            self.multiple_leaves_branches = [branch for branch in branches if nleaves_max[branch] > 1]
+
+
+        def setup_parameter_names(self):
+            """
+            Set up the parameter names for the Nautilus interface.
+            """
+            branches = self.eryn_sampler.branch_names
+            ndims = self.eryn_sampler.ndims
+
+            self.nbranches = len(branches)
+
+            self.parameter_names = []
+            for branch in branches:
+                for i in range(ndims[branch]):
+                    if branch in self.multiple_leaves_branches:
+                        for j in range(self.eryn_sampler.nleaves_max[branch]):
+                            self.parameter_names.append(f"{branch}_x{i}_leaf_{j}")
+                        # decide wether to add a product space index
+                        if branch in self.rj_branches:
+                            self.parameter_names.append(f"{branch}_nleaves")
+                    else:
+                        self.parameter_names.append(f"{branch}_x{i}")
+
+        def convert_priors(self):
+            """
+            Convert the priors to Nautilus format.
+            """
+            eryn_priors = self.eryn_sampler.priors
+
+            nautilus_priors = nautilus.Prior()
+
+            #j = 0
+            for branch in eryn_priors.keys():
+                for i in range(len(eryn_priors[branch].priors_in)):
+                    prior = eryn_priors[branch].priors_in[i]
+
+                    parameters_in = [p for p in self.parameter_names if f"{branch}_x{i}" in p]
+                    for parameter in parameters_in:
+                    #parameter = self.parameter_names[j]
+
+                        # if the parameter is the product space index, use a uniform prior
+                        if 'nleaves' in parameter:
+                            nautilus_priors.add_parameter(parameter, dist=(self.eryn_sampler.nleaves_min[branch], self.eryn_sampler.nleaves_max[branch]))
+
+                        else: 
+                            # regular parameter
+                            if isinstance(prior, eryn.prior.UniformDistribution):
+                                nautilus_priors.add_parameter(parameter, dist=(prior.min_val, prior.max_val))
+                            
+                            #check if the prior is a scipy distribution
+                            elif isinstance(prior, scipy.stats._distn_infrastructure.rv_frozen):
+                                nautilus_priors.add_parameter(parameter, dist=prior)
+
+                            elif hasattr(prior, 'rvs'):
+                                #check if the prior as a rvs method:
+                                nautilus_priors.add_parameter(parameter, dist=prior)
+                            
+                            else:
+                                raise ValueError(f"Unsupported prior type: {type(prior)}")
+
+                if branch in self.rj_branches:
+                    # add the prior for the number of leaves
+                    parameter = f"{branch}_nleaves"
+                    nautilus_priors.add_parameter(parameter, dist=(self.eryn_sampler.nleaves_min[branch], self.eryn_sampler.nleaves_max[branch]+1))
+                
+            return nautilus_priors
+
+        def args_to_leaves(self, args_list, nleaves, ndims):
+            """
+            Convert the arguments for a branch with multiple leaves.
+
+            Args:
+                args_list (list): list of arrays containing the values of each parameter of each leaf (both used and unused)
+                nleaves (ndarray): array of numbers of leaves used
+                ndims (int): dimensionality of a single leaf
+            
+            Returns:
+                args_branch (ndarray): Branch arguments converted in Eryn's format
+                args_groups (ndarray): Groups of the arguments for the RJ branch
+            """
+            
+            args_all = np.array(args_list).T
+            nin = args_all.shape[0]
+            args_shaped = args_all.reshape(nin, -1, ndims)
+            
+            total_params = np.sum(nleaves)
+            # Create the mask array
+            mask = np.zeros((nin, args_shaped.shape[1]), dtype=bool)
+            # Create the groups index array
+            groups = np.zeros(total_params, dtype=int)            # Fill in the True values according to nleaves
+            current_idx = 0
+            for i, leaf_count in enumerate(nleaves):
+                # Set the first nleaves[i] elements in row i to True
+                mask[i, :leaf_count] = True
+                if leaf_count > 0:  # Skip walkers with 0 leaves
+                    groups[current_idx:current_idx + leaf_count] = i
+                    current_idx += leaf_count
+            
+            return args_shaped[mask], groups
+
+        def args_to_leaves(self, args_list, nleaves, ndims):
+            """
+            Convert the arguments for a branch with multiple leaves.
+
+            Args:
+                args_list (list): list of arrays containing the values of each parameter of each leaf (both used and unused)
+                nleaves (ndarray): array of numbers of leaves used
+                ndims (int): dimensionality of a single leaf
+            
+            Returns:
+                args_branch (ndarray): Branch arguments converted in Eryn's format
+                args_groups (ndarray): Groups of the arguments for the RJ branch
+            """
+            # Convert input list to NumPy array and reshape
+            args_all = np.asarray(args_list).T
+            args_shaped = args_all.reshape(args_all.shape[0], -1, ndims)
+
+            # Generate mask using broadcasting
+            leaf_indices = np.arange(args_shaped.shape[1])
+            mask = leaf_indices < nleaves[:, None]
+
+            # Create groups array efficiently
+            groups = np.repeat(np.arange(len(nleaves)), nleaves)
+
+            return args_shaped[mask], groups
+
+        def convert_args(self, args_dict):
+            """
+            Convert the arguments from the Nautilus prior for the Eryn Likelihood.
+            """
+            eryn_args = []
+            eryn_groups = []   
+
+            for branch in self.eryn_sampler.branch_names:
+
+                if branch in self.multiple_leaves_branches:
+                    # multiple leaves branch
+                    #args_list = [np.atleast_1d(args_dict[f"{branch}_x{i}_leaf_{j}"]) for i in range(self.eryn_sampler.ndims[branch]) for j in range(self.eryn_sampler.nleaves_max[branch])]
+                    args_list = [np.atleast_1d(args_dict[f"{branch}_x{i}_leaf_{j}"]) for j in range(self.eryn_sampler.nleaves_max[branch]) for i in range(self.eryn_sampler.ndims[branch])]
+                    if branch in self.rj_branches:
+                        # RJ branch
+                        nleaves = np.atleast_1d(args_dict[f"{branch}_nleaves"]).astype(int)
+                    else:
+                        nleaves = (np.atleast_1d(self.eryn_sampler.nleaves_max[branch]) * np.ones_like(args_dict[f"{branch}_x0_leaf_0"])).astype(int)
+                    
+                    args_branch, groups_branch = self.args_to_leaves(args_list, nleaves, ndims=self.eryn_sampler.ndims[branch])
+                    eryn_args.append(args_branch)
+                    eryn_groups.append(groups_branch)
+
+                    #put the information in the format required by the Eryn sampler
+      
+                else: # regular branch, this is easy
+                    args_list = [np.atleast_1d(args_dict[f"{branch}_x{i}"]) for i in range(self.eryn_sampler.ndims[branch])]
+                    
+                    args_branch = np.array(args_list).T #, axis=1)
+                    groups_branch = np.arange(args_branch.shape[0])
+
+                    eryn_args.append(args_branch)
+                    eryn_groups.append(groups_branch)
+
+            if self.nbranches == 1:
+                eryn_args = eryn_args[0]
+                eryn_groups = eryn_groups[0]
+            
+            if self.eryn_sampler.provide_groups:
+                return eryn_args, eryn_groups
+            else:
+                return (eryn_args, )
+        
+        def log_like_fn(self, args_dict):
+            """
+            Compute the log likelihood for the Nautilus interface.
+            """
+            eryn_args = self.convert_args(args_dict)
+            eryn_args_and_kwargs = (eryn_args, {})
+            return self.eryn_sampler.log_like_fn(eryn_args_and_kwargs)#, *args, **kwargs)
+
+
+        def build_sampler(self, **kwargs):
+            """
+            Build the Nautilus sampler.
+            """
+            self.setup_rj_branches()
+            self.setup_parameter_names()
+            priors = self.convert_priors()
+
+            # fetch some keywords from the Eryn sampler
+            # Split the filename before the extension and insert the suffix 'nautilus'
+            try:
+                filename, ext = os.path.splitext(self.eryn_sampler.backend.filename)
+                backend = f"{filename}_nautilus{ext}"
+            except Exception as e:
+                backend = None
+                print(f"No backend found for the following Exception: {e}. Please provide a backend if you want to save the results.")
+
+
+            sampler_kwargs = {
+                        'vectorized': self.eryn_sampler.vectorize,
+                        'filepath': backend,
+                        'resume': True
+                    }
+
+            sampler_kwargs = sampler_kwargs | kwargs
+
+            self.sampler = nautilus.Sampler(priors, self.log_like_fn, **sampler_kwargs)
+
+            return self.sampler
+        
+        def run(self, discard_exploration=True, verbose=True, sampler_kwargs={}, run_kwargs={}):
+            """
+            Build and run the Nautilus sampler.
+            """
+            self.sampler = self.build_sampler(**sampler_kwargs)
+            self.sampler.run(verbose=verbose, discard_exploration=discard_exploration, **run_kwargs)
+
+            #load ands save the posterior independently
+            # get the directory where the backend is savedww
+            filename, ext = os.path.splitext(self.sampler.filepath)
+
+            posterior = self.get_samples()
+            posterior.to_parquet(f"{filename}_posterior.parquet", index=False)
+
+        def get_samples(self, labels=None):
+            """
+            Fetch the samples and fill a pandas DataFrame.
+            """
+            
+            points, log_w, log_l = self.sampler.posterior()
+            weights = np.exp(log_w)
+
+            points = points[weights > 0]
+            weights = weights[weights > 0]
+
+            labels = [fr"$x_{i}$" for i in range(points.shape[1])] if labels is None else labels
+
+            df = pd.DataFrame(points, columns=labels)
+            df['weight'] = weights
+
+            return df
+        
+        def plot_occupation(self, savepath=None):
+            """
+            Plot the shell-bound occupation for diagnostic
+            """
+
+            occ = self.sampler.shell_bound_occupation()
+
+            plt.figure()
+
+            plt.imshow(occ.T, origin='lower', cmap='Blues',
+                    extent=(0.5, len(occ) + 0.5, 0.5, len(occ) + 0.5))
+            plt.gca().xaxis.set_minor_locator(plt.MultipleLocator(1))
+            plt.gca().yaxis.set_minor_locator(plt.MultipleLocator(1))
+            plt.xlabel('Shell')
+            plt.ylabel('Bound')
+            cb = plt.colorbar()
+            cb.set_label('Occupation Fraction')
+            plt.tight_layout()
+
+            if savepath is not None:
+                plt.savefig(f"{savepath}/occupation")
+                plt.close()
+            else:
+                plt.show()
+
+        def plot_corner(self, truths=None, savepath=None, **kwargs):
+            """
+            Plot the corner plot for the samples.
+            """
+            if isinstance(truths, dict):
+                labels = truths.keys()
+            else:
+                labels = None
+            samples = self.get_samples(labels=labels)
+            labels = samples.columns[:-1]
+            if isinstance(truths, (list, np.ndarray)):
+                truths = dict(zip(labels, truths))
+            
+            C, fig = pysco.plot.chainplot(samples, truths=truths, plot_dir=savepath, savename='nautilus_corner', **kwargs)
+            
+            return C, fig
+
+        def make_plots(self, truths=None, savepath=None, **kwargs):
+            """
+            Make the diagnostic plots.
+            """
+            self.plot_occupation(savepath=savepath)
+            C, fig = self.plot_corner(truths=truths, savepath=savepath, **kwargs)
+
+            return C, fig
