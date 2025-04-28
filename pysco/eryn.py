@@ -521,7 +521,7 @@ class DiagnosticPlotter:
             legend_labels = ['' for _ in range(len(self.tempcolors))]
             legend_labels[0] = r' $T_i$'
             legend_handles = [plt.Rectangle((0, 0), 1, 1, color=color) for color in legend_colors]
-            legend_entry = plt.legend(legend_handles, legend_labels, loc='upper right', ncol=len(self.tempcolors), mode='expand', frameon=False, framealpha=0, bbox_to_anchor=(0.8, 0.95))
+            legend_entry = plt.legend(legend_handles, legend_labels, loc='upper right', ncol=len(self.tempcolors), mode='expand', frameon=False, framealpha=0, bbox_to_anchor=(0.6, 0.95))
 
             # Add legend entry to the plot
             plt.gca().add_artist(legend_entry)
@@ -602,7 +602,8 @@ class DiagnosticPlotter:
             except:
                 warnings.warn(f"Could not compute the auto-correlation times for the branch {key}.")
 
-        plt.loglog(Npoints, Npoints / 50, label=r'$\tau = N/50$', linestyle='--', color='black')
+        plt.loglog(Npoints, Npoints / 50, label=r'$\tau = N/50$', linestyle='--', color='black', alpha=0.5)
+        plt.loglog(Npoints, Npoints / 100, label=r'$\tau = N/100$', linestyle='--', color='black', alpha=1.0)
 
         plt.xlabel(r'$N_{\rm steps}$')
         plt.ylabel(r'$\tau$')
