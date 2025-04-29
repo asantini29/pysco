@@ -964,7 +964,8 @@ def compute_discard_thin(backend, ess=1e4):
         backend (object): The backend object.
         ess (float): Effective sample size. Default is 1e4.
     Returns:    
-        None
+        discard (int): Number of samples to discard. If `ess` is None, it is set to twice the maximum auto-correlation time (based on `emcee`).
+        thin (int): Thinning factor. This is computed as half of the minimum auto-correlation time (based on `emcee`).
     """
     samples = backend.get_chain()
     tau = {}
@@ -981,17 +982,25 @@ def compute_discard_thin(backend, ess=1e4):
         if np.isfinite(tau_here):
             taus_all.append(tau_here)
     
-    thin = int(np.max(taus_all))
+    thin = int(0.5 * np.min(taus_all))
+    base_discard = int(2 * np.max(taus_all))
     print("Number of steps: ", nsteps)
 
     if ess is not None:
         ess = int(ess)
         N_keep = int(np.ceil(ess * thin / nw))
+        N_discard = backend.iteration - N_keep
         print("Number of samples to keep: ", N_keep)
-        discard = max(5000, backend.iteration - N_keep)
+        if N_discard < 0:
+            print("The chains are not long enough for the provided effective sample size. Discarding twice the maximum auto-correlation time.")
+            discard = base_discard
+
     else:
-        discard = int(2*thin)
-        print("Number of samples to discard: ", discard)
+        discard = base_discard
+    
+    print("Number of samples to discard: ", discard)
+    print("Thinning factor: ", thin)
+
     return discard, thin
 
 def arrange_inds(inds):
@@ -1099,6 +1108,7 @@ class SamplesLoader():
         if discard is None or thin is None:
             if not hasattr(self, 'discard') or not hasattr(self, 'thin'):
                 discard, thin = compute_discard_thin(backend=self.backend, ess=ess)
+                self.discard, self.thin = discard, thin
             else:
                 discard, thin = self.discard, self.thin
         else:
@@ -1146,7 +1156,7 @@ class SamplesLoader():
         discard, thin = self.discard, self.thin
         return self.backend.get_nleaves(discard=discard, thin=thin)
     
-    def make_dataframe(self, labels=None, samples=None, ess=1e4):
+    def make_dataframe(self, labels=None, samples=None, ess=1e4, return_dict=False):
         """
         Make a pandas DataFrame from the samples.
 
@@ -1154,6 +1164,7 @@ class SamplesLoader():
             labels (dict): Dictionary containing the labels for each parameter in each branch.
             samples (dict): Dictionary containing the samples for each branch. Default is None.
             ess (float): Effective sample size. Default is 1e4.
+            return_dict (bool): Whether to return a dictionary of DataFrames or a single DataFrame. Default is False.
         
         Returns:
             dict: Dictionary containing the pandas DataFrame for each branch.
@@ -1163,7 +1174,7 @@ class SamplesLoader():
         assert labels is not None, "Labels must be provided."
 
         if samples is None:
-            samples = self.load(ess=ess)
+            samples, logL, logP = self.load(ess=ess)
 
         if not isinstance(labels, dict):
             labels = {'tmp': labels}
@@ -1186,7 +1197,14 @@ class SamplesLoader():
 
             dfs[branch] = df
 
-        return dfs if len(dfs) > 1 else dfs[branch]
+        if return_dict:
+            return dfs
+
+        else:
+            if len(dfs) == 1:
+                return dfs[branch]
+            else:
+                return pd.concat(dfs.values(), axis=0, ignore_index=True)
         
 
 class ImportanceSampler():
@@ -1280,6 +1298,8 @@ class ImportanceSampler():
         ndims = self.current_backend.ndims
         nleaves_max = self.current_backend.nleaves_max
 
+        #breakpoint()
+
         current_groups = get_groups_from_all_inds(current_inds)
 
         current_information = {
@@ -1300,7 +1320,7 @@ class ImportanceSampler():
 
         self.current_information = current_information
 
-    def compute_target_probabilities(self, samples, groups, current_logL):
+    def compute_target_probabilities(self, samples, groups):
         """
         Compute the weights for the importance sampling.
 
@@ -1352,7 +1372,7 @@ class ImportanceSampler():
 
         nsteps = self.current_information['nsteps']
         logL = self.current_information['logL']
-
+        
         for i in tqdm(range(nsteps)):
 
             samples_batch = []
@@ -1368,9 +1388,7 @@ class ImportanceSampler():
                 samples_batch.append(samples_here)
                 groups_batch.append(groups_here)
 
-            flattened_logL = logL[i].reshape(-1)
-
-            flattened_target_logL = self.compute_target_probabilities(samples=samples_batch, groups=groups_batch, current_logL=flattened_logL)
+            flattened_target_logL = self.compute_target_probabilities(samples=samples_batch, groups=groups_batch)
 
             target_logL_batch = flattened_target_logL.reshape(-1, self.current_information['ntemps'], self.current_information['nwalkers'])
 
@@ -1478,7 +1496,7 @@ class ImportanceSampler():
                 inds.create_dataset(key, data=self.target_backend.inds[key])   
 
 
-    def run(self, ess = 1e4, backend='./importance_resampled_backend.h5'):
+    def run(self, ess=1e4, backend='./importance_resampled_backend.h5'):
         """
         Run the importance sampler.
 

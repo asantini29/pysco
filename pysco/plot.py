@@ -433,7 +433,7 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     while n_chains > len(colors):
         #locate
         idx_now = my_colorlists.index(colorstring)
-        if idx_now < len(my_colorlists) + 1:
+        if idx_now < len(my_colorlists) - 1:
             colorstring = my_colorlists[idx_now + 1]
             colors = get_colorslist(colors=colorstring)
         else:
