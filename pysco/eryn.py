@@ -521,12 +521,12 @@ class DiagnosticPlotter:
             legend_labels = ['' for _ in range(len(self.tempcolors))]
             legend_labels[0] = r' $T_i$'
             legend_handles = [plt.Rectangle((0, 0), 1, 1, color=color) for color in legend_colors]
-            legend_entry = plt.legend(legend_handles, legend_labels, loc='upper right', ncol=len(self.tempcolors), mode='expand', frameon=False, framealpha=0, bbox_to_anchor=(0.6, 0.95))
+            legend_entry = plt.legend(legend_handles, legend_labels, loc='upper right', ncol=len(self.tempcolors), mode='expand', frameon=False, framealpha=0, bbox_to_anchor=(0.65, 0.95))
 
             # Add legend entry to the plot
             plt.gca().add_artist(legend_entry)
 
-            fig.text(0.07, 0.083, f"Step: {self.sampler.iteration}", ha='left', va='top', fontfamily='serif', c='k')
+            fig.text(0.07, 0.08, f"Step: {self.sampler.iteration}", ha='left', va='top', fontfamily='serif', c='k')
             #plt.title(key)
             fig.savefig(self.path + 'leaves_' + key + self.suffix, dpi=150)
             plt.close()
@@ -551,7 +551,7 @@ class DiagnosticPlotter:
         toplim = 0
 
         samples = self.sampler.get_chain(discard=0, thin=1)
-        inds = self.sampler.get_inds(discard=0, thin=1)
+        nleaves_all = self.sampler.get_nleaves(discard=0, thin=1)
         Npoints = np.exp(np.linspace(np.log(min(100, self.sampler.iteration)), np.log(self.sampler.iteration), N)).astype(int)
 
         extra_keys = ['logl']
@@ -565,6 +565,7 @@ class DiagnosticPlotter:
             if key == 'logl':
                 chain = self.sampler.get_log_like(discard=0, thin=1)
                 nsteps, nt, nw = chain.shape
+                chain = chain[..., None]
                 key = r'$\log{\mathcal{L}}$'   
                 ls = '--'
 
@@ -574,18 +575,23 @@ class DiagnosticPlotter:
                 chain = chain.reshape(nsteps, nt, nw, -1)
                 key = 'converted'
                 ls = '-.'
+            
+            elif key in self.rj_branches:
+                chain = nleaves_all[key][..., None]
+                ls = '-'
 
             else:
                 chain = samples[key]
                 nsteps, nt, nw, nleaves, ndim = chain.shape
                 chain = chain.reshape(nsteps, nt, nw, nleaves * ndim)
                 ls = '-'
+
             ntemps = chain.shape[1] if all_T else 1
             tau = np.empty(shape=(len(Npoints), ntemps, chain.shape[-1]))
 
-            try:
+            try:   
                 for i, N in enumerate(Npoints):
-                    tau[i] = get_integrated_act(chain[:N, :ntemps], average=True, **kwargs)
+                    tau[i] = get_integrated_act(chain[:N], average=True, **kwargs)[:ntemps]
 
                 for temp in range(ntemps):
                     where_max = np.argmax(tau[:, temp], axis=-1)
@@ -600,6 +606,7 @@ class DiagnosticPlotter:
                     toplim = max(toplim, 5 * max(tau[-1, temp, where_max]))
                 
             except:
+                breakpoint()
                 warnings.warn(f"Could not compute the auto-correlation times for the branch {key}.")
 
         plt.loglog(Npoints, Npoints / 50, label=r'$\tau = N/50$', linestyle='--', color='black', alpha=0.5)
@@ -624,6 +631,11 @@ class DiagnosticPlotter:
         Returns:
             None
         """
+        nanmask = np.isnan(logl[:, 0].flatten())
+
+        maxlogl = np.max(logl[:, 0].flatten()[~nanmask])
+        minlogl = np.min(logl[:, 0].flatten()[~nanmask])  
+
         fig = plt.figure()
         for walk in range(self.nw):
             plt.plot(logl[:, 0, walk], ls='-', alpha=0.7, lw=1)
@@ -631,8 +643,9 @@ class DiagnosticPlotter:
         if self.true_logl is not None:
             plt.axhline(self.true_logl, color='k', ls='--', lw=2)
         plt.ylabel(r'$\log{\mathcal{L}}$')
-        fig.savefig(self.path + 'loglike_evolution' + self.suffix, dpi=150)
+        plt.ylim(minlogl, maxlogl)
 
+        fig.savefig(self.path + 'loglike_evolution' + self.suffix, dpi=150)
         plt.close()
 
     def plot_logl_betas(self, betas, logl):
@@ -649,7 +662,7 @@ class DiagnosticPlotter:
         fig = plt.figure()
         for temp in range(self.nt):
             mask = np.isfinite(logl[:, temp])
-            plt.loglog(betas[-1, temp], np.mean(logl[:, temp][mask]), '.', c=self.tempcolors[temp], label=f'$T_{temp}$')
+            plt.semilogx(betas[-1, temp], np.mean(logl[:, temp][mask]), '.', c=self.tempcolors[temp], label=f'$T_{temp}$')
 
         if self.true_logl is not None:
             plt.axhline(self.true_logl, color='k', ls='--', lw=2)
@@ -787,7 +800,7 @@ class GelmanRubinStopping(Stopping):
 
 class AutoCorrelationStopping(Stopping):
     
-    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, all_temps=False, ess=None, transform_fn=None, n_iters=5, diff=0.1, start_iteration=0):
+    def __init__(self, autocorr_multiplier=50, verbose=False, N=0, n_skip=0, ess=None, transform_fn=None, n_iters=5, diff=0.1, start_iteration=0):
         """
         Stopping criterion based on the auto-correlation time.
 
@@ -796,7 +809,6 @@ class AutoCorrelationStopping(Stopping):
             verbose (bool): Whether to print the diagnostic values. Default is False.
             N (int): Number of iterations to run after convergence. Default is 0, meaning that the run is stopped as soon as the threshold is reached.
             n_skip (int): Number of iterations to skip before applying the stopping criterion. Default is 0.
-            all_temps (bool): Whether to compute the auto-correlation time across all temperatures. Default is False.
             ess (float): Effective sample size. Default is None.
             transform_fn (callable): Function to transform the chains before computing the diagnostic. Default is None.
             n_iters (int): Number of iterations to check for Likelihood convergence. Default is 5.
@@ -812,7 +824,6 @@ class AutoCorrelationStopping(Stopping):
         self.ess = ess
         self.when_to_stop = np.inf
         self.transform_fn = transform_fn
-        self.all_temps = all_temps
         #likelihood checks. Adapted from the SearchConvergenceStopping criterion
         self.n_iters = n_iters
         self.diff = diff
@@ -820,6 +831,7 @@ class AutoCorrelationStopping(Stopping):
 
         self.iters_consecutive = 0
         self.past_like_best = -np.inf
+        self.past_like_best_avg = -np.inf
         
 
     def __call__(self, iter, last_sample, sampler):
@@ -837,11 +849,16 @@ class AutoCorrelationStopping(Stopping):
         """
 
         # get best Likelihood so far
-        like_best = sampler.get_log_like(discard=self.start_iteration).max()
+        logl = sampler.get_log_like(discard=self.start_iteration)
+        like_best = logl.max()
+
+        # get also the maximum likelihood averagered over the walkers
+        logl_avg = logl.mean(axis=-1)
+        like_best_avg = logl_avg.max()
 
         # compare to last
         # if it is less than diff change it passes
-        if np.abs(like_best - self.past_like_best) < self.diff:
+        if np.abs(like_best - self.past_like_best) < self.diff and np.abs(like_best_avg - self.past_like_best_avg) < self.diff:
             self.iters_consecutive += 1
 
         else:
@@ -850,23 +867,18 @@ class AutoCorrelationStopping(Stopping):
 
             # store new best
             self.past_like_best = like_best
+            self.past_like_best_avg = like_best_avg
 
         samples = sampler.get_chain(discard=0, thin=1)
+        nleaves_all = sampler.get_nleaves(discard=0, thin=1)
 
         if self.transform_fn is not None:
             samples = self.transform_fn(samples)
 
-        tau = {}
-        for name in samples.keys():
-            chain = samples[name]
-            nsteps, ntemps, nw, nleaves, ndims = chain.shape
-            chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
-            ind = ntemps if self.all_temps else 1
-            chain = chain[:, :ind]
-            tau[name] = get_integrated_act(chain, average=True)
-
-        #tau = get_integrated_act(samples)
-
+        tau = get_integrated_act_wrap(samples, nleaves=nleaves_all, average=True, fast=True)
+        #take only the cold temperature
+        tau = {key: value[0] for key, value in tau.items()}
+    
         use_to_stop = []
         for name, values in tau.items():
             if np.all(np.isfinite(values)):
@@ -954,26 +966,60 @@ class AutoCorrelationStopping(Stopping):
         """
         
         return int(np.ceil(self.ess * tau / nw))
+
+def get_integrated_act_wrap(samples, nleaves=None, average=True, fast=False):
+    """
+    Compute the integrated auto-correlation time for RJ moves.
+
+    Args:
+        samples (dict): The samples to compute the auto-correlation time for.
+        nleaves (dict): The number of active leaves. This is only used for RJ branches. Default is None.
+        average (bool): Whether to average the auto-correlation time across all dimensions. Default is True.
+        fast (bool): Whether to use the fast method for computing the auto-correlation time. Default is False.
+    Returns:
+        tau (array): The integrated auto-correlation time for the samples.
+    """
+    tau = {}
+    for name in samples.keys():
+        chain = samples[name]
+        nsteps, ntemps, nw, nl, ndims = chain.shape
+        if np.any(np.isnan(chain)):
+            #RJ branch, use the nleaves
+            # now do leaves count
+            nleaves_here = nleaves[name][..., None] # act as ndim
+            tau[name] = get_integrated_act(nleaves_here, average=average, fast=fast)
+            
+        
+        else:
+            #non RJ branch
+            chain = chain.reshape(nsteps, ntemps, nw, nl * ndims)
+            tau[name] = get_integrated_act(chain, average=average, fast=fast)
+    
+    return tau
+    
     
 @pysco.utils.timeit
-def compute_discard_thin(backend, ess=1e4):
+def compute_discard_thin(backend, ess=1e4, discard_multiplier=5, thin_multiplier=0.5):
     """
     Compute the number of samples to discard and thin.
 
     Args:
         backend (object): The backend object.
         ess (float): Effective sample size. Default is 1e4.
+        discard_multiplier (float): Multiplier for the maximum auto-correlation time to compute the number of samples to discard. Default is 5.
+        thin_multiplier (float): Multiplier for the minimum auto-correlation time to compute the thinning factor. Default is 0.5.
     Returns:    
-        discard (int): Number of samples to discard. If `ess` is None, it is set to twice the maximum auto-correlation time (based on `emcee`).
-        thin (int): Thinning factor. This is computed as half of the minimum auto-correlation time (based on `emcee`).
+        discard (int): Number of samples to discard. If `ess` is None, it is set to `discard_multiplier` times the maximum auto-correlation time (based on `emcee`).
+        thin (int): Thinning factor. This is computed as `thin_multiplier` times the minimum auto-correlation time (based on `emcee`).
     """
     samples = backend.get_chain()
-    tau = {}
-    for name in samples.keys():
-        chain = samples[name]
-        nsteps, ntemps, nw, nleaves, ndims = chain.shape
-        chain = chain.reshape(nsteps, ntemps, nw, nleaves * ndims)
-        tau[name] = get_integrated_act(chain, average=True, fast=True)
+    tmp_key = list(samples.keys())[0]
+    nsteps, ntemps, nw, _, _ = samples[tmp_key].shape
+
+    nleaves = backend.get_nleaves()
+    tau =  get_integrated_act_wrap(samples, nleaves, average=True, fast=True)
+    #take only the cold temperature
+    tau = {key: value[0] for key, value in tau.items()}
     
     taus_all = []
 
@@ -982,8 +1028,8 @@ def compute_discard_thin(backend, ess=1e4):
         if np.isfinite(tau_here):
             taus_all.append(tau_here)
     
-    thin = int(0.5 * np.min(taus_all))
-    base_discard = int(2 * np.max(taus_all))
+    thin = int(thin_multiplier * np.min(taus_all))
+    base_discard = int(discard_multiplier * np.max(taus_all))
     print("Number of steps: ", nsteps)
 
     if ess is not None:
@@ -991,9 +1037,11 @@ def compute_discard_thin(backend, ess=1e4):
         N_keep = int(np.ceil(ess * thin / nw))
         N_discard = backend.iteration - N_keep
         print("Number of samples to keep: ", N_keep)
-        if N_discard < 0:
-            print("The chains are not long enough for the provided effective sample size. Discarding twice the maximum auto-correlation time.")
+        if N_discard < base_discard:
+            print(f"The chains are not long enough for the provided effective sample size. Discarding {discard_multiplier} times the maximum auto-correlation time.")
             discard = base_discard
+        else:
+            discard = N_discard
 
     else:
         discard = base_discard
@@ -1825,3 +1873,179 @@ if nautilus_here:
             C, fig = self.plot_corner(truths=truths, savepath=savepath, **kwargs)
 
             return C, fig
+    
+
+class PPplotter:
+    def __init__(self, truths, true_logL=None):
+        """
+        Initialize the PPplotter class with truths and true_logL.
+
+        args:
+        truths: np.ndarray
+            The true values of the parameters to be used as a reference for the posterior predictive plot.
+        true_logL: np.ndarray, optional
+            True log-likelihood values for the truths.
+        """ 
+        self.truths = truths
+        self.true_logL = true_logL
+
+    @property
+    def truths(self):
+        return self._truths
+    @truths.setter
+    def truths(self, value):
+        """
+        Set the truths for the posterior predictive plot.
+        args:
+        value: np.ndarray
+            The true values of the parameters to be used as a reference for the posterior predictive plot.
+        """
+        if value is not None and not isinstance(value, np.ndarray):
+            raise ValueError("truths must be a numpy array")
+        self._truths = value
+    
+    @property
+    def ratios(self):
+        return self._ratios
+    @ratios.setter
+    def ratios(self, value):
+        """
+        Set the ratios for the posterior predictive plot.
+        args:
+        value: np.ndarray
+            The ratios of samples with log-likelihood greater than the true log-likelihood.
+        """
+        if value is not None and not isinstance(value, np.ndarray):
+            raise ValueError("ratios must be a numpy array")
+        self._ratios = value
+
+
+    def distance(self, samples, weights=None):
+        """
+        Calculate the distance from the truths for each sample.
+        args:
+        samples: np.ndarray
+            The samples from the posterior distribution.
+        weights: np.ndarray, optional
+            Weights for each sample, if None, equal weights are assumed.
+        returns:
+        distances: np.ndarray
+            The distances of each sample from the truths.
+        """
+        if self.truths is None:
+            return None
+        
+        if weights is None:
+            weights = np.ones(samples.shape[0])
+        
+        distances = np.sqrt(np.sum((samples - self.truths) ** 2, axis=1)) / weights
+        return distances
+    
+    def compute_ratio(self, logL, samples=None, weights=None):
+        """
+        Compute the ratio between the number of samples whose 
+        likelihood is greater than the true log-likelihood and the total number of samples.
+        args:
+            logL: np.ndarray
+                Log-likelihood values at each samples. 
+            samples: np.ndarray, optional
+                The samples from the posterior distribution.
+            weights: np.ndarray, optional
+                Weights for each sample, if None, equal weights are assumed.
+            
+        returns:
+            ratio: float
+                The ratio of samples with log-likelihood greater than the true log-likelihood.
+        """
+
+        if self.true_logL is None:
+            if samples is None:
+                raise ValueError("if the true likelihood is not provided it must be computed from the samples")
+            else:
+                distances = self.distance(samples, weights)
+                true_logL_index = np.argmin(distances)
+                true_logL = logL[true_logL_index]
+
+        else:
+            true_logL = self.true_logL
+        
+        quantile_logL = np.count_nonzero(logL > true_logL) / len(logL)
+        return quantile_logL
+    
+    def compute_all_ratios(self, all_logLs, all_samples=None, all_weights=None):
+        """
+        Compute the ratio for each log-likelihood in logLs.
+        args:
+            all_logLs: list of np.ndarray
+                List of log-likelihood values for each sample set.
+            all_samples: list of np.ndarray or pd.DataFrame, optional
+                List of samples from the posterior distribution for each log-likelihood.
+            all_weights: list of np.ndarray, optional
+                List of weights for each sample set, if None, equal weights are assumed.
+        returns:
+            None
+        """
+
+        ratios = []
+        if all_samples is None:
+            all_samples = [None] * len(all_logLs)
+        if all_weights is None:
+            all_weights = [None] * len(all_logLs)
+            
+        for logL, samples, weights in zip(all_logLs, all_samples, all_weights):
+            # If samples is a DataFrame, convert it to a numpy array
+            if isinstance(samples, pd.DataFrame):
+                if 'weight' in samples.columns:
+                    weights = samples['weight'].values
+                    samples = samples.drop(columns='weight')
+                else:
+                    weights = np.ones(samples.shape[0])
+                samples = samples.values
+            ratio = self.compute_ratio(logL, samples=samples, weights=weights)
+            ratios.append(ratio)
+        ratios = np.array(ratios)
+        self.ratios = ratios
+
+    def plot(self, significance=0.95, fig=None, ax=None, N_draws=0, **kwargs):
+        """
+        Plot the posterior predictive plot.
+        args:
+            significance: float, optional
+                The significance level for the posterior predictive plot. Default is 0.95.
+            fig: matplotlib.figure.Figure, optional
+                The figure to plot on. If None, a new figure is created.
+            ax: matplotlib.axes.Axes, optional
+                The axes to plot on. If None, a new axes is created.
+            N_draws: int, optional
+                The number of random realization of empirical distributions to draw. Default is 0, which means no random draws. 
+            **kwargs: dict
+                Additional keyword arguments to pass to the plot
+        returns:
+            ax: matplotlib.axes.Axes
+                The axes with the posterior predictive plot.
+        """
+
+        try:
+            import ligo.skymap.plot
+        except ImportError:
+            raise ImportError("ligo.skymap.plot is required for plotting. Please install ligo.skymap.")
+        
+        if fig is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='pp_plot')
+        
+        if self.ratios is None:
+            raise ValueError("ratios must be computed before plotting")
+        
+        N = len(self.ratios)
+        ax.add_confidence_band(N, alpha=significance)
+        ax.add_diagonal() # Add diagonal line
+        
+        if N_draws > 0:
+            ax.add_lightning(N, N_draws, color='k', alpha=0.1)
+
+        ax.add_series(self.ratios, drawstyle='lines', color='k')
+
+        ax.set_xlabel("Observed quantiles")
+        ax.set_ylabel("Cumulative fraction")
+        return ax

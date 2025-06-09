@@ -67,6 +67,7 @@ def default_plotting(style='light', backcolor=None, frontcolor=None):
     Set the default plotting parameters for matplotlib.
 
     Parameters:
+    - style (str): The style of the plot. Can be 'light', 'dark'. Default is 'light'.
     - backcolor (str): The background color of the plot. Default is 'white'.
     - frontcolor (str): The foreground color of the plot. Default is 'black'.
     """
@@ -444,7 +445,7 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     
     fontsize = mpl.rcParams['font.size']
     ticksize = mpl.rcParams['xtick.labelsize']
-    offset_fontsize = fontsize - 2
+    offset_fontsize = ticksize# + 2
 
     C = chainconsumer.ChainConsumer()
 
@@ -469,7 +470,7 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
         C.add_chain(chain)
 
     if truths is not None:
-        C.add_truth(chainconsumer.Truth(location=truths, color=mpl.rcParams['text.color'], line_style="-", name="Injection"))
+        C.add_truth(chainconsumer.Truth(location=truths, color=mpl.rcParams['text.color'], line_style="-", name="True Values"))
     #c.add_marker(location=df_truths[plotting_columns[:-1]], color='k', marker_style='x', marker_size=20, name="Injection")
 
     default_chain_kwargs = {
@@ -518,12 +519,6 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     fig = C.plotter.plot(offset=offset)
     axes = fig.get_axes()
     # format_ticks(axes)
-
-    ndim = len(columns_here)
-
-    indices_first_row = np.arange(0, len(axes), 1)[len(axes) - ndim:]
-    indices_first_column = np.arange(0, len(axes), ndim)
-
 
     for i, ax in enumerate(axes):
         # Use ScalarFormatter for scientific notation

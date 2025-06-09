@@ -32,7 +32,7 @@ Some of the main routines currently implemented in `pysco` :
 
 We use [SemVer](http://semver.org/) for versioning. 
 
-Current Version: 0.0.4
+Current Version: 0.0.5
 
 ## License
 
