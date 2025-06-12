@@ -368,7 +368,7 @@ def to_pandas(samples, labels):
     df = pd.DataFrame(samples, columns=labels)
     return df
 
-def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savename=None, ls=None, offset=True, padding=1.0, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
+def chainplot(dfs, names=None, columns=None, truths=None, colors=None, plot_dir='./', savename=None, ls=None, offset=True, padding=1.0, chain_kwargs={}, chainconfig_kwargs={}, legend_kwargs={}, plotconfig_kwargs={}):
     """
     Plots MCMC chains using ChainConsumer.
     Parameters:
@@ -382,6 +382,8 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
         If list, specific columns are used. If list of lists, different columns for each chain.
     truths : list, optional
         List of true values to be plotted as reference lines.
+    colors : str or list, optional
+        Color(s) for the chains. If None, default colors are used. If str, a color name / hex code or the name of a colorlist.
     plot_dir : str, optional
         Directory to save the plot. Default is current directory.
     savename : str, optional
@@ -428,8 +430,17 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
 
     lss = ["-", "--", "-.", ":"] if ls is None else [ls] * n_chains
     my_colorlists = ['colors6', 'colors8', 'colors10']
-    colorstring = 'colors6'
-    colors = get_colorslist(colors=colorstring) #TODO add flexibility for colors
+
+    if colors is None:
+        colorstring = 'colors6'
+        colors = get_colorslist(colors=colorstring) #TODO add flexibility for colors
+    elif isinstance(colors, str):
+        if colors in my_colorlists:
+            colorstring = colors
+            colors = get_colorslist(colors=colorstring)
+        else:
+            # assume colors is a single color
+            colors = [colors] * n_chains
 
     while n_chains > len(colors):
         #locate
@@ -521,14 +532,14 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
     # format_ticks(axes)
 
     for i, ax in enumerate(axes):
-        # Use ScalarFormatter for scientific notation
+        # Use ScalarFormatter for scientific notation. format everything to 1 decimal place
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True, useOffset=True))
         ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True, useOffset=True))
 
         #isnegative = ax.get_xticks()[0] < 0
         offset_amount = 0.3 #if isnegative else 1.3
         x_offset = ax.xaxis.get_offset_text()
-        x_offset.set_x(1.0)  # Fine-tune as needed
+        x_offset.set_x(1.)  # Fine-tune as needed
         x_offset.set_y(-offset_amount)  # Move below the axis
         # set fontsize
         x_offset.set_fontsize(offset_fontsize)
@@ -545,6 +556,9 @@ def chainplot(dfs, names=None, columns=None, truths=None, plot_dir='./', savenam
             xpad, ypad = padding
         ax.xaxis.set_label_coords(0.5, -0.2*xpad)  # Adjust label position manually
         ax.yaxis.set_label_coords(-0.2*ypad, 0.5)
+
+
+    
 
     #plt.tight_layout()
     if savename is not None:
