@@ -2,3 +2,5 @@ numpy
 matplotlib
 corner
 GPUtil
+pandas
+chainconsumer
