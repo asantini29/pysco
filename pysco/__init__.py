@@ -16,12 +16,10 @@ from .pysco import __author_email__
 
 from .pysco import *
 
-import pysco.plot, pysco.utils
+import pysco.plot, pysco.utils, pysco.journals
 
 try:
     import pysco.eryn
-    import pysco.lisautils.emris
-
     eryn_here = True
 
 except (ImportError, ModuleNotFoundError):

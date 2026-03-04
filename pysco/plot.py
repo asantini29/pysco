@@ -111,7 +111,7 @@ def default_plotting(style='light', backcolor=None, frontcolor=None):
         'savefig.dpi' : 200,
         'savefig.format' : 'pdf',
         'savefig.bbox' : 'tight',
-        'savefig.transparent' : True,
+        #'savefig.transparent' : True,
     }
 
     plt.rcParams.update(default_rcParams)
@@ -121,6 +121,7 @@ def default_plotting(style='light', backcolor=None, frontcolor=None):
     elif style == 'dark':
         set_colors(backcolor='none', frontcolor='white')
         mpl.rcParams['savefig.format'] = 'png'
+        mpl.rcParams['savefig.transparent'] = True
     else:
         set_colors(backcolor=backcolor, frontcolor=frontcolor)
 
@@ -190,6 +191,8 @@ def custom_corner(function):
         Raises:
         None.
         """
+
+        current_style = mpl.rcParams.copy()
 
         corner_rcParams = {
             'xtick.top': False,
@@ -284,6 +287,7 @@ def custom_corner(function):
             fig.savefig(filename)
         
         default_plotting(backcolor=backcolor, frontcolor=frontcolor)
+        #mpl.rcParams.update(current_style)
 
         return fig
 

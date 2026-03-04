@@ -44,10 +44,14 @@ def get_clean_chain(coords, ndim, temp=0):
     samples_in = np.zeros((coords[:, temp, :, :, 0].flatten()[naninds].shape[0], ndim))  # init the chains to plot
     # get the samples to plot
     for d in range(ndim):
-        givenparam = coords[:, temp, :, :, d].flatten()
-        samples_in[:, d] = givenparam[
-            np.logical_not(np.isnan(givenparam))
-        ]  # Discard the NaNs, each time they change the shape of the samples_in
+        try:
+            givenparam = coords[:, temp, :, :, d].flatten()
+            samples_in[:, d] = givenparam[
+                np.logical_not(np.isnan(givenparam))
+            ]  # Discard the NaNs, each time they change the shape of the samples_in
+        except:
+            print("Could not get parameter ", d)
+            breakpoint()
     return samples_in
 
 def adjust_covariance(samp, discard=0.8, svd=False, lr=None, skip_idxs=[]):
@@ -148,6 +152,7 @@ class DiagnosticPlotter:
 
     def __init__(self, sampler, path, truths, labels, plot_kwargs={}, plot_all_temps=False, transform_all=None, true_logl=None, discard=0.3, suffix='', converter=None) -> None:
         self.sampler = sampler
+        os.makedirs(path, exist_ok=True)
         self.path = path
         self.truths = truths
         self.labels = labels
@@ -273,7 +278,8 @@ class DiagnosticPlotter:
         self.plot_logl_evolution(logl)
         self.plot_logl_betas(betas, logl)
 
-
+        #ensure all the figures are actually closed
+        plt.close('all')
 
         if return_samples:
             return samples, logl
@@ -300,7 +306,7 @@ class DiagnosticPlotter:
             ndims = self.sampler.ndims[key]
 
             if self.transform_all is not None:
-                    samples_here = self.transform_all[key].both_transforms(samples[key])
+                    samples_here = self.transform_all[key].transform_base_parameters(samples[key])
             else:
                 samples_here = samples[key]
 
