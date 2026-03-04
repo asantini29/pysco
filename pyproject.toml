@@ -17,13 +17,14 @@ dependencies = [
     "matplotlib",
     "corner",
     "GPUtil",
+    "pandas",
+    "chainconsumer",
 ]
 
 [project.optional-dependencies]
 eryn = [
     "eryn",
     "scipy",
-    "pandas",
     "tqdm",
     "h5py",
 ]

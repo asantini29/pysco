@@ -5,13 +5,27 @@
 ## Installing:
 1. Clone the repository:
    ```
-   git clone https://github.com/asantini29/pysco.git   
+   git clone https://github.com/asantini29/pysco.git
    cd pysco
    ```
-3. Run install:
+2. Install [uv](https://docs.astral.sh/uv/) if you haven't already:
    ```
-   python setup.py install
+   pip install uv
    ```
+3. Install the package and its dependencies using `uv`:
+   ```
+   uv sync
+   ```
+   To include the optional `eryn` dependencies:
+   ```
+   uv sync --extra eryn
+   ```
+
+## Usage:
+Run Python commands using `uv run` to ensure the correct environment is used:
+```
+uv run python your_script.py
+```
 
 ## Tools:
 Some of the main routines currently implemented in `pysco` :
