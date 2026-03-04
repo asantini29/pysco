@@ -12,7 +12,7 @@ import pickle as pkl
 from tqdm import tqdm
 import h5py
 
-import pysco.plot
+import pysco.plots
 
 
 from .utils import find_files, reorder_dict
@@ -199,7 +199,7 @@ class DiagnosticPlotter:
             print('All branches:', sampler.branch_names)
             print('Branches with RJ:', self.rj_branches)
 
-            self.tempcolors = pysco.plot.get_colors_from_cmap(self.nt, cmap='inferno', reverse=False)
+            self.tempcolors = pysco.plots.get_colors_from_cmap(self.nt, cmap='inferno', reverse=False)
 
             if not isinstance(self.truths, dict):
                 self.truths = np.atleast_2d(self.truths)
@@ -325,7 +325,7 @@ class DiagnosticPlotter:
                     logl_here = True
 
                 try:
-                    fig = pysco.plot.corner(chain,
+                    fig = pysco.plots.corner(chain,
                                             truths=truths_here,
                                             labels=labels_here,
                                             save=False,
@@ -388,7 +388,7 @@ class DiagnosticPlotter:
                 
                 if covs:
                     steps = np.arange(100, nsteps, 100, dtype=int)
-                    colors = pysco.plot.get_colorslist(colors='colors6')
+                    colors = pysco.plots.get_colorslist(colors='colors6')
 
                     fig, axs = plt.subplots(ndims, 1, figsize=(20, 5*ndims), sharex=True)
 
@@ -412,7 +412,7 @@ class DiagnosticPlotter:
                 nsteps, ntemps, nw = new_samples.shape[:3]
                 new_samples = new_samples.reshape(nsteps, ntemps, nw, -1)
                 new_samples_flat = new_samples[:, 0].reshape(nsteps * nw, -1)
-                fig = pysco.plot.corner(new_samples_flat,
+                fig = pysco.plots.corner(new_samples_flat,
                                         # truths=truths_here,
                                         # labels=labels_here,
                                         save=True,
@@ -566,7 +566,7 @@ class DiagnosticPlotter:
             extra_keys.append('converted')
             extra_colors.append('darkgray')
 
-        for key, color in zip(extra_keys + list(samples.keys()), extra_colors + pysco.plot.get_colorslist(colors='colors10')):
+        for key, color in zip(extra_keys + list(samples.keys()), extra_colors + pysco.plots.get_colorslist(colors='colors10')):
 
             if key == 'logl':
                 chain = self.sampler.get_log_like(discard=0, thin=1)
@@ -1867,7 +1867,7 @@ if nautilus_here:
             if isinstance(truths, (list, np.ndarray)):
                 truths = dict(zip(labels, truths))
             
-            C, fig = pysco.plot.chainplot(samples, truths=truths, plot_dir=savepath, savename='nautilus_corner', **kwargs)
+            C, fig = pysco.plots.chainplot(samples, truths=truths, plot_dir=savepath, savename='nautilus_corner', **kwargs)
             
             return C, fig
 

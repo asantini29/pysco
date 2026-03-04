@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pysco"
+version = "0.0.4"
+description = "PYthon ShortCuts & Others: plotting routines I like to use & overall collection of useful snippets"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Alessandro Santini", email = "alessandro.santini@aei.mpg.de" }
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "corner",
+    "GPUtil",
+]
+
+[project.optional-dependencies]
+eryn = [
+    "eryn",
+    "scipy",
+    "pandas",
+    "tqdm",
+    "h5py",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

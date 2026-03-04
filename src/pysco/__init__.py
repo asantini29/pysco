@@ -16,7 +16,8 @@ from .pysco import __author_email__
 
 from .pysco import *
 
-import pysco.plot, pysco.utils, pysco.journals
+import pysco.plots
+import pysco.utils
 
 try:
     import pysco.eryn
