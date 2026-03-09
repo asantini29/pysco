@@ -5,6 +5,7 @@ from pathlib import Path
 
 _mplfiles_dir = Path(__file__).parent / "mplfiles"
 paper_style = str(_mplfiles_dir / "paper.mplstyle")
+corner_style = str(_mplfiles_dir / "corner.mplstyle")
 
 pt = 1./72.27 # Hundreds of years of history... 72.27 points to an inch.
 golden_ratio = (1. + 5.**0.5)/2.
