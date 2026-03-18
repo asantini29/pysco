@@ -16,7 +16,8 @@ def test_get_style_resolves_packaged_style_path():
     assert params["figure.figsize"][0] == journals.journal_sizes["prd"]["onecol"]
 
 
-def test_get_style_keeps_explicit_mplstyle_path():
-    explicit = "/tmp/custom.mplstyle"
+def test_get_style_keeps_explicit_mplstyle_path(tmp_path):
+    explicit = str(tmp_path / "custom.mplstyle")
+    Path(explicit).touch()
     style, _ = journals.get_style(explicit)
     assert style == explicit

@@ -39,8 +39,8 @@ def get_style(style, journal="prd", cols="onecol", aspect=golden_ratio):
 
     Returns
     -------
-    list
-        List of style files and parameters to use with plt.style.context() or plt.style.use().
+    list[str | dict]
+        Two-element list: [style_file_or_name, {"figure.figsize": (width, height)}].
     """
     if style.split(".")[-1] != "mplstyle":
         style = _packaged_style_path(style)
