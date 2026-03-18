@@ -33,6 +33,14 @@ pysco.plots.plot
    :undoc-members:
    :show-inheritance:
 
+pysco.plots.journals
+--------------------
+
+.. automodule:: pysco.plots.journals
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pysco.eryn
 ----------
 

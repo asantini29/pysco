@@ -60,6 +60,7 @@ Sphinx documentation is available under `docs/` and can be built locally with:
 ```
 python -m sphinx -b html docs docs/_build/html
 ```
+Built documentation is available on GitHub Pages: <https://asantini29.github.io/pysco/>
 
 ## Versioning
 
