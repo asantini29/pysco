@@ -1,5 +1,7 @@
 # pysco: PYthon ShortCuts & Others
 
+[![Documentation Status](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://asantini29.github.io/pysco/)
+
 `pysco` is a Python module that contains some plotting routines I usually use and other useful snippets.
 
 ## Installing:
