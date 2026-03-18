@@ -1,0 +1,80 @@
+### Baseline style for corner plots (corner.py / chainconsumer).
+#
+# These values define the *reference* sizes for ~5 parameters.  The
+# adaptive scaling in pysco.plots (see _corner_scale_factor) gently
+# enlarges fonts and strokes when N_params > 5, using a low exponent
+# (0.3) so a 12-parameter plot is only ~28 % larger than the baseline.
+# Edit the numbers below to change the baseline.
+#
+# Usage:
+#   import matplotlib.pyplot as plt
+#   from pysco.plots import corner_style
+#   plt.style.use(corner_style)            # set baseline rcParams
+#   fig = corner(samples, labels=labels)   # sizes auto-scale to N_params
+
+# ---------------------------------------------------------------------------
+# Text / LaTeX
+# ---------------------------------------------------------------------------
+text.usetex:                True
+text.latex.preamble:        \usepackage{amsmath}\usepackage{amssymb}
+font.family:                serif
+font.serif:                 Computer Modern
+
+# Base font size — the scale factor multiplies these directly.
+font.size:                  24
+
+# ---------------------------------------------------------------------------
+# Axes
+# ---------------------------------------------------------------------------
+axes.labelsize:             24      # parameter labels on x/y
+axes.titlesize:             24      # 1-D histogram titles (medians, quantiles)
+axes.linewidth:             0.8
+
+axes.formatter.use_mathtext: True
+axes.formatter.limits:      -3, 4
+
+# ---------------------------------------------------------------------------
+# Ticks
+# Outward ticks on bottom/left only.  Minor ticks off by default (they add
+# visual noise in dense corner grids).
+# ---------------------------------------------------------------------------
+xtick.top:              False
+xtick.direction:        out
+xtick.major.size:       5
+xtick.minor.size:       3
+xtick.major.width:      0.8
+xtick.minor.width:      0.4
+xtick.minor.visible:    False
+xtick.labelsize:        20
+
+ytick.right:            False
+ytick.direction:        out
+ytick.major.size:       5
+ytick.minor.size:       3
+ytick.major.width:      0.8
+ytick.minor.width:      0.4
+ytick.minor.visible:    False
+ytick.labelsize:        20
+
+# ---------------------------------------------------------------------------
+# Lines / patches (contours, histograms)
+# ---------------------------------------------------------------------------
+lines.linewidth:        2.0
+patch.linewidth:        1.0
+
+# ---------------------------------------------------------------------------
+# Legend
+# ---------------------------------------------------------------------------
+legend.fontsize:        20
+legend.frameon:         False
+legend.handlelength:    1.5
+legend.handletextpad:   0.5
+legend.labelspacing:    0.6
+legend.borderaxespad:   0.0
+
+# ---------------------------------------------------------------------------
+# Save
+# ---------------------------------------------------------------------------
+savefig.dpi:    300
+savefig.format: pdf
+savefig.bbox:   tight
