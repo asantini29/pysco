@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 # Credits: https://github.com/duetosymmetry/latex-mpl-fig-tips/blob/main
 
-from pathlib import Path
+try:
+    from importlib.resources import files
+except ImportError:
+    from importlib_resources import files
 
-_mplfiles_dir = Path(__file__).parent / "mplfiles"
-paper_style = str(_mplfiles_dir / "paper.mplstyle")
-corner_style = str(_mplfiles_dir / "corner.mplstyle")
+
+def _packaged_style_path(name):
+    return str(files("pysco.plots").joinpath("mplfiles", f"{name}.mplstyle"))
+
+
+paper_style = _packaged_style_path("paper")
+corner_style = _packaged_style_path("corner")
 
 pt = 1./72.27 # Hundreds of years of history... 72.27 points to an inch.
 golden_ratio = (1. + 5.**0.5)/2.
@@ -32,11 +39,11 @@ def get_style(style, journal="prd", cols="onecol", aspect=golden_ratio):
 
     Returns
     -------
-    list
-        List of style files and parameters to use with plt.style.context() or plt.style.use().
+    list[str | dict]
+        Two-element list: [style_file_or_name, {"figure.figsize": (width, height)}].
     """
     if style.split(".")[-1] != "mplstyle":
-        style = str(_mplfiles_dir / f"{style}.mplstyle")
+        style = _packaged_style_path(style)
 
     width = journal_sizes[journal][cols]
     return [style, {"figure.figsize": (width, width / aspect)}]
