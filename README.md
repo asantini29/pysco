@@ -10,7 +10,11 @@
    ```
 2. Install [uv](https://docs.astral.sh/uv/) if you haven't already:
    ```
-   pip install uv
+   # on MacOS or Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # on Windows
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    ```
 3. Install the package and its dependencies using `uv`:
    ```
@@ -40,6 +44,7 @@ pysco/
 │       ├── __init__.py
 │       ├── plot.py
 │       └── journals.py
+│       └── mplfiles/
 ```
 
 ## Tools
@@ -66,7 +71,7 @@ Built documentation is available on GitHub Pages: <https://asantini29.github.io/
 
 We use [SemVer](http://semver.org/) for versioning. 
 
-Current Version: 0.0.4
+Current Version: 0.1.0
 
 ## License
 
