@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pysco"
-version = "0.0.4"
+version = "0.1.0"
 description = "PYthon ShortCuts & Others: plotting routines I like to use & overall collection of useful snippets"
 readme = "README.md"
 license = { text = "MIT" }
