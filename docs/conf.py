@@ -1,12 +1,17 @@
 import os
 import sys
+from pathlib import Path
+import tomllib
 
 sys.path.insert(0, os.path.abspath("../src"))
 
 project = "pysco"
 author = "Alessandro Santini"
 copyright = "2026, Alessandro Santini"
-release = "0.0.4"
+
+pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+with pyproject.open("rb") as f:
+    release = tomllib.load(f)["project"]["version"]
 
 extensions = [
     "sphinx.ext.autodoc",
