@@ -5,7 +5,6 @@ import warnings
 import time
 from datetime import timedelta
 from functools import wraps
-import GPUtil
 import string
 import itertools
 
@@ -23,9 +22,13 @@ def get_free_gpus(n_gpus=1):
     free_gpus : list
         List of IDs of free GPUs.
     '''
-
-    free_gpus = GPUtil.getAvailable(order='first', limit=n_gpus, maxLoad=0.01, maxMemory=0.01)
-    return free_gpus
+    try:
+        import GPUtil
+        free_gpus = GPUtil.getAvailable(order='first', limit=n_gpus, maxLoad=0.01, maxMemory=0.01)
+        return free_gpus
+    except (ImportError, ModuleNotFoundError):
+        warnings.warn("GPUtil is not installed. Cannot get free GPUs.")
+        return []
 
 def find_files(dir, extension):
     '''
