@@ -13,7 +13,7 @@ lines.linewidth: 0.5
 ## ***************************************************************************
 ## * AXES                                                                    *
 ## ***************************************************************************
-axes.linewidth:     0.4     # edge line width
+axes.linewidth:     0.3     # edge line width
 axes.labelsize:     10  # font size of the x and y labels
 axes.labelpad:      2.0     # space between label and axis
 #axes.labelweight:   normal  # weight of the x and y labels
@@ -72,10 +72,12 @@ ytick.minor.visible: True   # visibility of minor ticks on y-axis
 legend.loc:           upper right
 legend.frameon:       False     # if True, draw the legend on a background patch
 # legend.framealpha:    0.8      # legend patch transparency
-# legend.fancybox:      True     # if True, use a rounded box for the
+legend.fancybox:      True     # if True, use a rounded box for the
                                 # legend background, else a rectangle
 #legend.markerscale:   1.0      # the relative size of legend markers vs. original
 legend.fontsize:      8
+legend.scatterpoints: 3
+legend.numpoints: 1
 
 ## ***************************************************************************
 ## * FIGURE                                                                  *
