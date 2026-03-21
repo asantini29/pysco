@@ -9,9 +9,8 @@ project = "pysco"
 author = "Alessandro Santini"
 copyright = "2026, Alessandro Santini"
 
-pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
-with pyproject.open("rb") as f:
-    release = tomllib.load(f)["project"]["version"]
+import pysco
+release = pysco.__version__
 
 extensions = [
     "sphinx.ext.autodoc",
