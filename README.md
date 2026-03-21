@@ -73,7 +73,7 @@ Built documentation is available on GitHub Pages: <https://asantini29.github.io/
 
 We use [SemVer](http://semver.org/) for versioning. 
 
-Current Version: 0.1.0
+Current Version: 0.1.1 (see [src/pysco/pysco.py](src/pysco/pysco.py))
 
 ## License
 
