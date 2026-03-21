@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pysco"
-version = "0.1.0"
+dynamic = ["version"]
 description = "PYthon ShortCuts & Others: plotting routines I like to use & overall collection of useful snippets"
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,3 +35,6 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "pysco.plots" = ["mplfiles/*.mplstyle"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pysco.__version__"}
